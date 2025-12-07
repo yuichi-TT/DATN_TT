@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    // File structure
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // Node.js backend settings
+    "module": "CommonJS",
+    "target": "ES2020",
+    "moduleResolution": "node",
+
+    // TypeScript strict mode
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}
