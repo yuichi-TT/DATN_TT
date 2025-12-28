@@ -1,333 +1,201 @@
 import React, { useState } from 'react';
-// Import các hook và type cần thiết
-import { useQuery, useMutation, useQueryClient, type QueryFunctionContext } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { adminAPI } from '../../services/api'; 
-import type { Room, ApiResponse, Pagination } from '../../types'; 
+import type { Room, Pagination } from '../../types'; 
+import { 
+  MapPinIcon, HomeModernIcon, CheckIcon, XMarkIcon, 
+  MagnifyingGlassIcon, UserCircleIcon, ClockIcon, BuildingOfficeIcon
+} from '@heroicons/react/24/outline';
 
-// === THÊM KIỂU DỮ LIỆU MỚI CHO TRẠNG THÁI ===
+// === 1. QUAN TRỌNG: Phải có | '' ở cuối ===
 type RoomStatus = 'pending' | 'approved' | 'rejected' | ''; 
 
-// Định nghĩa kiểu dữ liệu cho Query Key
+// Định nghĩa key query
 type RoomsQueryKey = ['admin', 'rooms', RoomStatus, number, string];
 
-// Đổi tên component
 const Rooms: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
-  // === THÊM STATE CHO STATUS ===
+  
+  // === 2. QUAN TRỌNG: Khai báo generic <RoomStatus> ===
   const [selectedStatus, setSelectedStatus] = useState<RoomStatus>('pending');
 
   const queryClient = useQueryClient();
 
-  //  LẤY DANH SÁCH PHÒNG THEO STATUS
+  // Fetching Data
   const { data: roomsResponse, isLoading } = useQuery({
     queryKey: ['admin', 'rooms', selectedStatus, currentPage, searchTerm] as RoomsQueryKey,
-    queryFn: async ({ queryKey }: QueryFunctionContext<RoomsQueryKey>) => {
-       const [_key1, _key2, status, page, search] = queryKey;
-       
+    queryFn: async ({ queryKey }) => {
+       const [_key1, _key2, status, page] = queryKey;
+       // Nếu là pending gọi API riêng (tuỳ logic backend của bạn)
        if (status === 'pending') {
-          const response = await adminAPI.getPendingRooms({ page: page, limit: 9 });
-          return response.data;
+          const res = await adminAPI.getPendingRooms({ page, limit: 9 });
+          return res.data;
        }
-       
-       
-       const params: { page: number, limit: number, status?: string } = {
-        page: page,
-        limit: 9,
-      };
-      
-      // Chỉ thêm status vào params nếu nó không phải là 'Tất cả' ('')
-      if (status) {
-          params.status = status;
-      }
-      
-      // Dùng API 'getRooms' chung cho các status khác
-       const response = await adminAPI.getRooms(params);
-       
-      return response.data; // Trả về phần data bên trong AxiosResponse
+       // Các trường hợp khác
+       const params: any = { page, limit: 9 };
+       if (status) params.status = status; // Nếu status rỗng thì không gửi param này
+       const res = await adminAPI.getRooms(params);
+       return res.data;
     },
     staleTime: 5 * 60 * 1000,
   });
 
-
-  // 2. THÊM MUTATIONS CHO DUYỆT/TỪ CHỐI
-   const approveRoomMutation = useMutation({
+  const approveRoomMutation = useMutation({
     mutationFn: (id: string) => adminAPI.approveRoom(id),
-    onSuccess: () => {
-      // === SỬA LỖI: CẬP NHẬT TẤT CẢ CÁC LIST ===
-      // Khi duyệt 1 phòng, nó sẽ MẤT ở list 'pending' và XUẤT HIỆN ở list 'approved'
-      // Bằng cách invalidate 'admin', 'rooms', ta báo cho React Query biết
-      // tất cả các query 'admin', 'rooms' (bao gồm cả 'pending' và 'approved') đều đã cũ.
-      queryClient.invalidateQueries({ queryKey: ['admin', 'rooms'] });
-    },
-    onError: (error) => {
-      console.error("Lỗi khi duyệt phòng:", error);
-    }
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'rooms'] }),
   });
 
   const rejectRoomMutation = useMutation({
     mutationFn: (id: string) => adminAPI.rejectRoom(id),
-    onSuccess: () => {
-      // Tương tự, cập nhật tất cả
-      queryClient.invalidateQueries({ queryKey: ['admin', 'rooms'] });
-    },
-     onError: (error) => {
-      console.error("Lỗi khi từ chối phòng:", error);
-    }
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin', 'rooms'] }),
   });
 
-  // Lấy dữ liệu phòng từ query
-  // LƯU Ý: Nếu Backend không lọc, `roomsResponse.data` sẽ chứa tất cả các trạng thái.
-  // Ta phải lọc lại ở Frontend để đảm bảo tab hiển thị đúng.
   const allRooms: Room[] = roomsResponse?.data ?? [];
   const pagination: Pagination | undefined = roomsResponse?.pagination;
 
-  // === THÊM BƯỚC LỌC DỮ LIỆU CHÍNH XÁC THEO TRẠNG THÁI (Nếu Backend không lọc) ===
-  const statusFilteredRooms = allRooms.filter(room => {
-    // Nếu status là 'Tất cả' ('') thì giữ lại hết
-    if (selectedStatus === '') return true;
-    // Ngược lại, chỉ giữ lại phòng có status khớp
-    return room.status === selectedStatus;
+  // === 3. LOGIC FILTER ===
+  const filteredRooms = allRooms.filter(room => {
+    // TypeScript sẽ không báo lỗi nữa vì selectedStatus được phép là ''
+    if (selectedStatus !== '' && room.status !== selectedStatus) return false;
+
+    return (
+        (room.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (room.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (room.landlord?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
   });
 
-  // Lọc phía client (vẫn giữ nguyên)
-  const filteredRooms = statusFilteredRooms.filter(room =>
-    (room.title || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (room.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (room.landlord?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  // ==============================================================================
-
-
-  // Hàm hiển thị trạng thái (vẫn giữ nguyên)
-  const getStatusBadge = (status: string | undefined) => {
-    switch (status) {
-      case 'pending':
-        return <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Chờ duyệt</span>;
-      case 'approved':
-         return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Đã duyệt</span>;
-       case 'rejected':
-         return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">Đã từ chối</span>;
-      default:
-         return <span className={`px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800`}>{status || 'N/A'}</span>;
-    }
-  };
-
-  // === COMPONENT MỚI: NÚT TAB ===
-  const TabButton: React.FC<{status: RoomStatus, label: string}> = ({ status, label }) => (
-    <button
-      onClick={() => {
-        setSelectedStatus(status);
-        setCurrentPage(1); // Reset về trang 1 khi đổi tab
-      }}
-      className={`px-4 py-3 text-sm font-medium ${
-        selectedStatus === status
-          ? 'border-b-2 border-primary-600 text-primary-600'
-          : 'border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-      }`}
-    >
-      {label}
-    </button>
-  );
-
+  const tabs = [
+    { id: 'pending', label: 'Chờ duyệt' },
+    { id: 'approved', label: 'Đã duyệt' },
+    { id: 'rejected', label: 'Đã từ chối' },
+    { id: '', label: 'Tất cả' },
+  ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Quản lý phòng trọ</h1>
-          <p className="text-gray-600 mt-2">
-            Kiểm duyệt và quản lý tất cả các tin đăng phòng trọ.
-          </p>
+          <h1 className="text-2xl font-bold text-gray-900">Quản lý phòng trọ</h1>
+          <p className="text-gray-500 text-sm">Kiểm duyệt và quản lý tin đăng</p>
         </div>
-      </div>
 
-      {/* Filters */}
-      <div className="card p-6 bg-white rounded-lg shadow border">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="search-input" className="block text-sm font-medium text-gray-700 mb-1">
-              Tìm kiếm (trong danh sách hiện tại)
-            </label>
-            <input
-              id="search-input"
-              type="text"
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1); // Reset page khi tìm kiếm
-              }}
-              placeholder="Tìm theo tiêu đề, địa chỉ, chủ trọ..."
-              className="input-field"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={() => {
-                setSearchTerm('');
-                setCurrentPage(1);
-              }}
-              className="btn-secondary w-full md:w-auto"
-            >
-              Xóa bộ lọc
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* === TABS CHỌN STATUS MỚI === */}
-      <div className="card bg-white rounded-lg shadow border overflow-hidden">
-        <div className="flex border-b border-gray-200">
-            <TabButton status="pending" label="Chờ duyệt" />
-            <TabButton status="approved" label="Đã duyệt" />
-            <TabButton status="rejected" label="Bị từ chối" />
-            <TabButton status="" label="Tất cả" />
-        </div>
-      
-        {/* Rooms Grid */}
-        {isLoading ? (
-          <div className="text-center py-20 text-gray-500">Đang tải danh sách phòng...</div>
-        ) : filteredRooms.length === 0 ? (
-            <div className="text-center py-20">
-                <p className="text-gray-500 text-lg">Không có phòng nào trong mục này.</p>
+        {/* Toolbar */}
+        <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm">
+            <div className="flex p-1 bg-gray-100/80 rounded-xl gap-1 w-full xl:w-auto overflow-x-auto no-scrollbar">
+                {tabs.map((tab) => (
+                    <button
+                        key={tab.id}
+                        // Ép kiểu id thành RoomStatus để khớp type
+                        onClick={() => { setSelectedStatus(tab.id as RoomStatus); setCurrentPage(1); }}
+                        className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap flex-1 md:flex-none ${
+                            selectedStatus === tab.id 
+                            ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-black/5' 
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200/50'
+                        }`}
+                    >
+                        {tab.label}
+                    </button>
+                ))}
             </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-            {filteredRooms.map((room) => (
-              <div key={room._id} className="bg-white overflow-hidden border border-gray-200 rounded-lg shadow-sm transition-shadow hover:shadow-md flex flex-col">
-                <div className="h-48 bg-gray-100 relative group flex-shrink-0">
-                  {room.images && room.images.length > 0 ? (
-                    <img
-                      src={room.images[0]}
-                      alt={`Ảnh phòng ${room.title}`}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                          e.currentTarget.onerror = null;
-                          e.currentTarget.src = 'https://placehold.co/600x400/eee/ccc?text=Ảnh+lỗi';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400 text-sm bg-gray-50">
-                      Không có ảnh
-                    </div>
-                  )}
-                   <div className="absolute top-2 right-2 z-10">
-                      {getStatusBadge(room.status)}
-                   </div>
-                </div>
+            <div className="relative group w-full xl:w-80">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 group-focus-within:text-indigo-600 transition-colors" />
+                <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Tìm theo tên, địa chỉ..."
+                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-none rounded-xl text-sm focus:bg-white focus:ring-2 focus:ring-indigo-100 outline-none transition-all"
+                />
+            </div>
+        </div>
+      </div>
 
-                <div className="p-4 flex flex-col justify-between flex-grow space-y-3">
-                  {/* Thông tin */}
-                  <div>
-                      <h3 title={room.title} className="font-semibold text-lg line-clamp-1 text-gray-800 hover:text-primary-600 transition-colors">
-                        {room.title || 'N/A'}
-                      </h3>
-                      <p title={`${room.address || 'N/A'}, ${room.district || 'N/A'}, ${room.city || 'N/A'}`} className="text-gray-500 text-sm mt-1 line-clamp-1">
-                        📍 {room.address || 'N/A'}, {room.district || 'N/A'}
-                      </p>
-                      <div className="flex justify-between items-center text-sm mt-2">
-                        <span className="text-primary-600 font-bold">
-                          {(room.price || 0).toLocaleString('vi-VN')} VNĐ
-                        </span>
-                        <span className="text-gray-500">{room.area || '?'} m²</span>
-                      </div>
-                       <div className="text-sm text-gray-600 pt-2 mt-2 border-t border-gray-100 flex justify-between items-center">
-                        <span>Đăng bởi: {room.landlord?.name || 'N/A'}</span>
-                        <span className="text-xs text-gray-400">
-                           {room.createdAt ? new Date(room.createdAt).toLocaleDateString('vi-VN') : 'N/A'}
-                         </span>
+      {/* Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
+             {[1,2,3].map(i => <div key={i} className="h-80 bg-gray-200 rounded-2xl" />)}
+        </div>
+      ) : filteredRooms.length === 0 ? (
+        <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-gray-200">
+             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                <BuildingOfficeIcon className="w-8 h-8 text-gray-400" />
+            </div>
+            <p className="text-gray-900 font-semibold">Không tìm thấy phòng trọ nào</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {filteredRooms.map((room) => (
+            <div key={room._id} className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-xl hover:shadow-indigo-100/50 transition-all duration-300 flex flex-col h-full">
+               <div className="relative h-56 bg-gray-200 overflow-hidden shrink-0">
+                  <img 
+                    src={room.images?.[0] || 'https://placehold.co/600x400?text=No+Image'} 
+                    alt={room.title} 
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute top-3 right-3">
+                     <span className={`px-2.5 py-1 rounded-lg text-xs font-bold shadow-sm backdrop-blur-md ${
+                        room.status === 'pending' ? 'bg-amber-400/90 text-white' :
+                        room.status === 'approved' ? 'bg-emerald-500/90 text-white' : 
+                        room.status === 'rejected' ? 'bg-red-500/90 text-white' : 'bg-gray-500/90 text-white'
+                     }`}>
+                        {room.status === 'pending' ? 'Chờ duyệt' : room.status === 'approved' ? 'Đã duyệt' : room.status === 'rejected' ? 'Từ chối' : room.status}
+                     </span>
+                  </div>
+                  <div className="absolute bottom-3 left-3 bg-gray-900/70 backdrop-blur-sm text-white px-3 py-1.5 rounded-lg text-sm font-semibold">
+                      {(room.price || 0).toLocaleString('vi-VN')} đ/tháng
+                  </div>
+               </div>
+
+               <div className="p-5 flex flex-col flex-grow">
+                  <div className="mb-4">
+                      <h3 className="font-bold text-gray-900 line-clamp-1 mb-1 group-hover:text-indigo-600 transition-colors">{room.title}</h3>
+                      <div className="flex items-center gap-1 text-gray-500 text-xs">
+                         <MapPinIcon className="w-3.5 h-3.5 shrink-0" />
+                         <span className="truncate">{room.address || 'N/A'}, {room.district}</span>
                       </div>
                   </div>
+                  
+                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 mb-4 bg-gray-50 p-3 rounded-xl border border-gray-100">
+                     <div className="flex items-center gap-1.5"><HomeModernIcon className="w-4 h-4 text-indigo-500" /><span>{room.area || 0} m²</span></div>
+                     <div className="flex items-center gap-1.5"><UserCircleIcon className="w-4 h-4 text-indigo-500" /><span className="truncate">{room.landlord?.name || 'Ẩn danh'}</span></div>
+                     <div className="flex items-center gap-1.5 col-span-2 mt-1 pt-1 border-t border-gray-200"><ClockIcon className="w-3.5 h-3.5 text-gray-400" /><span className="text-gray-400">Đăng: {new Date(room.createdAt).toLocaleDateString('vi-VN')}</span></div>
+                  </div>
 
-                  {/* Nút hành động */}
-                  <div className="flex space-x-2 pt-2 border-t border-gray-100">
-                     <Link
-                       to={`/room/${room._id}`}
-                       target="_blank"
-                       rel="noopener noreferrer"
-                       title="Xem chi tiết tin đăng (tab mới)"
-                       className="btn-secondary flex-1 text-center text-sm"
-                     >
-                       Xem trước
-                     </Link>
-                     
-                     {/* Chỉ hiển thị nút nếu ở tab 'pending' */}
-                     {selectedStatus === 'pending' && (
+                  <div className="mt-auto flex gap-2">
+                     <Link to={`/room/${room._id}`} target="_blank" className="flex-1 py-2.5 text-center text-xs font-bold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all">Xem chi tiết</Link>
+                     {(selectedStatus === 'pending' || (selectedStatus === '' && room.status === 'pending')) && (
                         <>
-                            <button
-                                onClick={() => approveRoomMutation.mutate(room._id)}
-                                disabled={isLoading || approveRoomMutation.isPending || (rejectRoomMutation.isPending && rejectRoomMutation.variables === room._id)}
-                                title="Duyệt tin đăng này"
-                                className="btn-sm bg-green-500 hover:bg-green-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {approveRoomMutation.isPending && approveRoomMutation.variables === room._id ? '...' : 'Duyệt'}
+                            <button onClick={() => approveRoomMutation.mutate(room._id)} disabled={approveRoomMutation.isPending} className="flex-1 py-2.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl font-bold text-xs flex justify-center items-center gap-1 hover:bg-emerald-100 transition-all">
+                                {approveRoomMutation.isPending ? '...' : <><CheckIcon className="w-3.5 h-3.5" /> Duyệt</>}
                             </button>
-                            <button
-                                onClick={() => rejectRoomMutation.mutate(room._id)}
-                                disabled={isLoading || rejectRoomMutation.isPending || (approveRoomMutation.isPending && approveRoomMutation.variables === room._id)}
-                                title="Từ chối tin đăng này"
-                                className="btn-sm bg-red-500 hover:bg-red-600 text-white disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {rejectRoomMutation.isPending && rejectRoomMutation.variables === room._id ? '...' : 'Từ chối'}
+                            <button onClick={() => rejectRoomMutation.mutate(room._id)} disabled={rejectRoomMutation.isPending} className="px-3 py-2.5 bg-red-50 text-red-700 border border-red-100 rounded-xl hover:bg-red-100 transition-all">
+                                {rejectRoomMutation.isPending ? '...' : <XMarkIcon className="w-4 h-4" />}
                             </button>
                         </>
                      )}
                   </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Pagination */}
-        {pagination && pagination.pages > 1 && (
-          <div className="flex justify-center p-6 border-t border-gray-200">
-             <div className="flex items-center space-x-1">
-               <button
-                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                 disabled={currentPage === 1 || isLoading}
-                 className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                 aria-label="Trang trước"
-               >
-                 &lt; Trước
-               </button>
-               {Array.from({ length: pagination.pages }, (_, i) => i + 1)
-                  .filter(page => page === 1 || page === pagination.pages || Math.abs(page - currentPage) <= 1 || (page === currentPage - 2) || (page === currentPage + 2))
-                  .map((page, index, arr) => (
-                      <React.Fragment key={page}>
-                          {index > 0 && page !== arr[index - 1] + 1 && (
-                               <span className="px-3 py-1.5 text-sm text-gray-500">...</span>
-                          )}
-                           <button
-                             onClick={() => setCurrentPage(page)}
-                             disabled={isLoading}
-                             className={`px-3 py-1.5 border rounded-md text-sm font-medium ${
-                               currentPage === page
-                                 ? 'bg-primary-600 text-white border-primary-600 z-10 ring-1 ring-primary-600'
-                                 : 'border-gray-300 text-gray-700 bg-white hover:bg-gray-50'
-                             }`}
-                             aria-current={currentPage === page ? 'page' : undefined}
-                           >
-                             {page}
-                           </button>
-                      </React.Fragment>
-               ))}
-               <button
-                 onClick={() => setCurrentPage(prev => Math.min(pagination.pages, prev + 1))}
-                 disabled={currentPage === pagination.pages || isLoading}
-                 className="px-3 py-1.5 border border-gray-300 rounded-md text-sm font-medium text-gray-600 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  aria-label="Trang sau"
-               >
-                 Sau &gt;
-               </button>
+               </div>
+            </div>
+          ))}
+        </div>
+      )}
+      
+       {/* Pagination (Giữ nguyên) */}
+       {pagination && pagination.pages > 1 && (
+         <div className="flex justify-center pt-6 border-t border-gray-200">
+             <div className="flex items-center gap-2">
+                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-50">&lt;</button>
+                <span className="text-sm font-medium text-gray-600 px-2">Trang {currentPage} / {pagination.pages}</span>
+                <button onClick={() => setCurrentPage(prev => Math.min(pagination.pages, prev + 1))} disabled={currentPage === pagination.pages} className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-50">&gt;</button>
              </div>
-          </div>
-        )}
-      </div>
+         </div>
+      )}
     </div>
   );
 };
 
-export default Rooms; // Đổi tên component
+export default Rooms;

@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 
@@ -9,12 +9,18 @@ import { roomAPI } from '../services/api';
 // Import Icons
 import { 
   MagnifyingGlassIcon, 
-  MapIcon, 
-  ChatBubbleOvalLeftEllipsisIcon 
+  MapPinIcon, 
+  ShieldCheckIcon,
+  SparklesIcon,
+  UserGroupIcon,
+  HomeModernIcon
 } from '@heroicons/react/24/outline';
 
 const Home: React.FC = () => {
+  const navigate = useNavigate();
+  const [keyword, setKeyword] = useState('');
 
+  // Lấy dữ liệu phòng
   const { data: roomsData, isLoading } = useQuery({
     queryKey: ['rooms', 'featured'],
     queryFn: () => roomAPI.getRooms({ isAvailable: true, limit: 6 }),
@@ -22,65 +28,109 @@ const Home: React.FC = () => {
 
   const featuredRooms = roomsData?.data.data || [];
 
-  // Animation variants
-  const sectionVariants = {
-    hidden: { opacity: 0, y: 50 },
-    visible: {
-      opacity: 1,
-      y: 0
+  // Xử lý tìm kiếm
+  const handleSearch = () => {
+    if (keyword.trim()) {
+      navigate(`/tim-phong?search=${encodeURIComponent(keyword)}`);
     }
+  };
+
+  const handleQuickTagClick = (tag: string) => {
+    navigate(`/tim-phong?search=${encodeURIComponent(tag)}`);
   };
 
   // Helper format giá
   const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(price);
   };
 
   return (
-    <div>
+    <div className="font-sans text-brand-dark bg-white">
       
       {/* ================================================================== */}
       {/* === HERO SECTION === */}
       {/* ================================================================== */}
-      <section 
-        className="relative w-full h-screen min-h-[500px] bg-cover bg-center" 
-        style={{ backgroundImage: "url('/hero2.jpg')" }}
-      >
-        <div className="absolute inset-0 bg-black/50" />
-        
-        <div className="relative z-10 h-full flex flex-col justify-center items-center text-white p-4">
-          <h1 className="text-4xl md:text-6xl font-bold mb-4 text-center drop-shadow-lg">
-            Find Your Best Property
-          </h1>
-          <p className="text-xl md:text-2xl mb-8 text-center text-gray-200 drop-shadow-md">
-            Hệ thống tìm kiếm phòng trọ uy tín tại Đà Nẵng
-          </p>
+      <section className="relative w-full h-[90vh] min-h-[600px] flex flex-col items-center pt-40 overflow-hidden bg-brand-main">
+        {/* GIỮ NGUYÊN PHẦN ẢNH NHƯ YÊU CẦU */}
+        <div 
+          className="absolute inset-0 bg-cover bg-center" 
+          style={{ backgroundImage: "url('/hero2.jpg')", filter: "brightness(0.85)" }}
+        />
+        {/* Gradient Overlay: Brand Main đậm dần xuống dưới */}
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-dark/40 via-transparent to-brand-main/90" />
 
-          <Link 
-            to="/tim-phong" 
-            className="btn-primary px-8 py-3 text-lg font-semibold rounded-full shadow-lg hover:shadow-xl hover:-translate-y-1 transition-all"
+        <div className="relative z-10 w-full max-w-5xl mx-auto px-4 text-center">
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
           >
-            Khám phá ngay
-          </Link>
+            {/* Badge: Dùng Brand Accent (Vàng) làm điểm nhấn */}
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white text-sm font-medium mb-6 shadow-lg">
+              <SparklesIcon className="w-4 h-4 text-brand-accent animate-pulse" />
+              <span>Trải nghiệm tìm trọ kiểu mới</span>
+            </div>
+            
+            <h1 className="text-5xl md:text-7xl font-bold text-white mb-6 tracking-tight drop-shadow-xl">
+              Nơi tốt nhất để <br className="hidden md:block" />
+              {/* Gradient Text: Brand Light -> Brand Soft (Xanh nhạt -> Vàng nhạt) */}
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-brand-light via-white to-brand-soft">
+                bắt đầu cuộc sống sinh viên
+              </span>
+            </h1>
+            
+            {/* Search Gateway */}
+            <div className="bg-white/95 backdrop-blur-xl p-3 rounded-3xl shadow-2xl shadow-brand-dark/20 max-w-3xl mx-auto mt-24 transform transition-transform hover:scale-[1.01] duration-300">
+              <div className="flex flex-col md:flex-row items-center gap-3">
+                <div className="flex-1 w-full relative group">
+                  <MapPinIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-6 h-6 text-gray-400 group-focus-within:text-brand-main transition-colors" />
+                  <input 
+                    type="text"
+                    placeholder="Nhập khu vực, tên trường hoặc đường..."
+                    className="w-full pl-12 pr-4 py-4 bg-primary-50 rounded-2xl outline-none text-brand-dark placeholder-gray-400 focus:bg-white focus:ring-2 focus:ring-brand-main/20 transition-all font-medium"
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                  />
+                </div>
+                
+                {/* Search Button: Brand Accent (Vàng) */}
+                <button 
+                  onClick={handleSearch}
+                  className="w-full md:w-auto px-10 py-4 bg-brand-accent hover:bg-yellow-600 text-white font-bold rounded-2xl shadow-lg shadow-brand-accent/30 flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  <MagnifyingGlassIcon className="w-5 h-5 stroke-2" />
+                  <span>Tìm ngay</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Tags */}
+            <div className="mt-6 flex flex-wrap justify-center gap-3">
+              <span className="text-white/80 text-sm font-medium py-1">Xu hướng:</span>
+              {['Hải Châu', 'Gần ĐH Bách Khoa', 'Sơn Trà', 'Căn hộ mini'].map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => handleQuickTagClick(tag)}
+                  className="px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/10 text-white text-sm hover:bg-brand-light hover:text-brand-dark transition-all cursor-pointer"
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </motion.div>
         </div>
       </section>
 
       {/* ================================================================== */}
-      {/* === PHÒNG TRỌ NỔI BẬT === */}
+      {/* === FEATURED ROOMS === */}
       {/* ================================================================== */}
-      <motion.section 
-        className="py-24 bg-gray-50"
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.2 }}
-        variants={sectionVariants}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-      >
+      <section className="py-24 bg-primary-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12 items-center">
             <div>
-              <span className="text-primary-600 font-semibold mb-2 block uppercase">TỔNG HỢP</span>
-              <h2 className="text-3xl md:text-4xl font-bold text-gray-900">
+              <span className="text-brand-main font-bold mb-2 block uppercase tracking-wider text-sm">TỔNG HỢP</span>
+              <h2 className="text-3xl md:text-4xl font-extrabold text-brand-dark">
                 Phòng trọ nổi bật
               </h2>
             </div>
@@ -93,71 +143,65 @@ const Home: React.FC = () => {
             // Skeleton Loading
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {[...Array(3)].map((_, index) => (
-                <div key={index} className="bg-white rounded-lg shadow-lg p-4 animate-pulse">
-                  <div className="bg-gray-300 h-56 rounded-lg mb-4"></div>
-                  <div className="bg-gray-300 h-4 rounded w-1/2 mb-3"></div>
-                  <div className="bg-gray-300 h-5 rounded w-3/4 mb-4"></div>
+                <div key={index} className="bg-white rounded-2xl shadow-lg p-4 animate-pulse border border-brand-light/20">
+                  <div className="bg-gray-200 h-56 rounded-xl mb-4"></div>
+                  <div className="bg-gray-200 h-4 rounded w-1/2 mb-3"></div>
+                  <div className="bg-gray-200 h-5 rounded w-3/4 mb-4"></div>
                 </div>
               ))}
             </div>
           ) : featuredRooms.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {featuredRooms.map((room: any) => (
+                // === CLASSIC CARD DESIGN ===
                 <div 
                   key={room._id} 
-                  className="bg-white rounded-lg shadow-lg overflow-hidden group transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 flex flex-col h-full"
+                  className="bg-white rounded-2xl shadow-sm hover:shadow-xl hover:shadow-brand-main/10 overflow-hidden group transition-all duration-300 flex flex-col h-full border border-brand-light/20"
                 >
-                  {/* === 1. CLICK VÀO ẢNH ĐỂ XEM CHI TIẾT (ĐÃ SỬA) === */}
-                  {/* Đổi từ /rooms/ thành /room/ */}
-                  <Link to={`/room/${room._id}`} className="relative h-56 bg-gray-200 overflow-hidden block">
+                  {/* Image Section */}
+                  <Link to={`/room/${room._id}`} className="relative h-64 bg-gray-200 overflow-hidden block">
                     <img
                       src={room.images?.[0] || 'https://placehold.co/600x400?text=No+Image'}
                       alt={room.title}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                      onError={(e) => (e.currentTarget.src = 'https://placehold.co/600x400?text=Error')}
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
                     />
                     
-                    <div className="absolute top-4 left-4 flex flex-col space-y-2">
-                      <span className="bg-brand-main text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md">
+                    <div className="absolute top-4 left-4">
+                      {/* Badge Mới: Brand Accent */}
+                      <span className="bg-brand-accent text-white text-xs font-bold px-3 py-1 rounded-full shadow-md border border-white/20">
                         Mới đăng
                       </span>
-                      {room.price < 2000000 && (
-                        <span className="bg-green-500 text-white text-xs font-semibold px-3 py-1 rounded-full shadow-md">
-                          Giá tốt
-                        </span>
-                      )}
                     </div>
                   </Link>
                   
-                  <div className="p-5 flex flex-col flex-grow">
-                    <p className="text-gray-500 text-sm mb-2 flex items-center">
-                       <MapIcon className="w-4 h-4 mr-1" />
+                  {/* Content Section */}
+                  <div className="p-6 flex flex-col flex-grow">
+                    <p className="text-brand-main/70 text-xs font-bold mb-2 flex items-center uppercase tracking-wide">
+                       <MapPinIcon className="w-3.5 h-3.5 mr-1 text-brand-accent" />
                        {room.district}, {room.city}
                     </p>
                     
-                    {/* === 2. CLICK VÀO TIÊU ĐỀ (ĐÃ SỬA) === */}
-                    <h3 className="font-semibold text-lg text-gray-900 mb-3 line-clamp-2">
-                      {/* Đổi từ /rooms/ thành /room/ */}
+                    <h3 className="font-bold text-lg text-brand-dark mb-3 line-clamp-2 leading-snug">
                       <Link to={`/room/${room._id}`} className="hover:text-brand-main transition-colors">
                         {room.title}
                       </Link>
                     </h3>
                     
-                    <div className="mt-auto pt-4 border-t border-gray-100 flex justify-between items-center">
-                      <span className="text-xl text-brand-main font-bold">
+                    {/* Price and Area Row */}
+                    <div className="mt-auto pt-4 flex justify-between items-center mb-5 border-t border-dashed border-gray-100">
+                      <span className="text-xl text-brand-main font-extrabold">
                         {formatPrice(room.price)}
-                        <span className="text-sm font-normal text-gray-500"> /tháng</span>
+                        <span className="text-sm font-medium text-gray-400"> /tháng</span>
                       </span>
-                      <span className="text-gray-500 text-sm bg-gray-100 px-2 py-1 rounded">
+                      <span className="text-brand-dark text-sm font-bold bg-brand-soft/30 px-2.5 py-1 rounded-lg border border-brand-soft/50">
                         {room.area}m²
                       </span>
                     </div>
 
-                    {/* === 3. NÚT XEM CHI TIẾT (ĐÃ SỬA) === */}
-                    {/* Đổi từ /rooms/ thành /room/ */}
+                    {/* Button "Xem chi tiết": Brand Main */}
                     <Link
                       to={`/room/${room._id}`}
-                      className="btn-primary w-full text-center mt-4 py-2"
+                      className="block w-full py-3 text-center text-white bg-brand-main hover:bg-brand-dark rounded-xl font-bold text-sm transition-all shadow-md shadow-brand-main/20 hover:shadow-brand-main/40"
                     >
                       Xem chi tiết
                     </Link>
@@ -168,94 +212,79 @@ const Home: React.FC = () => {
             </div>
           ) : (
             <div className="text-center py-12 text-gray-500">
-              Hiện chưa có phòng trọ nào được đăng.
+              Hiện chưa có phòng trọ nào.
             </div>
           )}
 
-          <div className="text-center mt-16">
+          <div className="text-center mt-12">
             <Link
               to="/tim-phong"
-              className="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-brand-main bg-brand-light hover:bg-brand-accent/20 md:text-lg transition-colors"
+              className="inline-flex items-center justify-center px-8 py-3 border-2 border-brand-main text-base font-bold rounded-full text-brand-main hover:bg-brand-light/10 md:text-lg transition-colors"
             >
               Xem tất cả phòng trọ
             </Link>
           </div>
         </div>
-      </motion.section>
+      </section>
 
       {/* ================================================================== */}
-      {/* === SECTION "TẠI SAO CHỌN" === */}
+      {/* === BENTO GRID === */}
       {/* ================================================================== */}
-      <motion.section 
-        className="py-24 bg-white"
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true, amount: 0.2 }}
-        variants={sectionVariants}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-      >
+      <section className="py-24 bg-white overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">
-              Tại sao chọn StudentHousing?
-            </h2>
-            <p className="text-gray-600 md:text-lg">
-              Hệ thống tìm phòng trọ hiện đại và tiện lợi dành cho sinh viên
-            </p>
-          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+            
+            <motion.div 
+              initial={{ opacity: 0, x: -50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8 }}
+            >
+              <h2 className="text-3xl md:text-5xl font-extrabold text-brand-dark mb-6 leading-tight">
+                Tại sao chọn <br/>
+                <span className="text-brand-main">StudentHousing?</span>
+              </h2>
+              <p className="text-lg text-gray-600 mb-8 leading-relaxed font-medium">
+                Hệ thống tìm phòng trọ hiện đại, tiện lợi và an toàn nhất dành cho sinh viên.
+              </p>
+              
+              <div className="space-y-6">
+                {[
+                  { icon: ShieldCheckIcon, title: 'Thông tin xác thực', desc: 'Mọi phòng trọ đều được kiểm duyệt kỹ càng.' },
+                  { icon: HomeModernIcon, title: 'Tiện nghi đầy đủ', desc: 'Bộ lọc thông minh giúp tìm phòng như ý.' },
+                  { icon: UserGroupIcon, title: 'Cộng đồng văn minh', desc: 'Kết nối sinh viên, review chân thực.' }
+                ].map((item, index) => (
+                  <div key={index} className="flex gap-4 p-4 rounded-2xl hover:bg-primary-50 transition-colors border border-transparent hover:border-brand-light/20">
+                    <div className="flex-shrink-0 w-14 h-14 rounded-2xl bg-brand-light/20 flex items-center justify-center">
+                      <item.icon className="w-7 h-7 text-brand-main" />
+                    </div>
+                    <div>
+                      <h4 className="text-xl font-bold text-brand-dark">{item.title}</h4>
+                      <p className="text-gray-500 mt-1 font-medium">{item.desc}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Item 1 */}
-            <div className="relative p-8 bg-white rounded-xl shadow-lg border border-gray-100 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
-              <div className="absolute top-0 left-0 -mt-4 ml-4">
-                <span className="text-6xl font-bold text-gray-100 opacity-80">01</span>
-              </div>
-              <div className="relative z-10 text-center">
-                <div className="mb-4 inline-block p-3 bg-blue-50 rounded-full">
-                  <MagnifyingGlassIcon className="h-8 w-8 text-blue-600" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2 text-gray-900">Tìm kiếm thông minh</h3>
-                <p className="text-gray-600">
-                  Công cụ lọc mạnh mẽ giúp bạn tìm phòng theo giá, vị trí và tiện nghi mong muốn chỉ trong vài giây.
-                </p>
-              </div>
-            </div>
-            
-            {/* Item 2 */}
-            <div className="relative p-8 bg-white rounded-xl shadow-lg border border-gray-100 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
-              <div className="absolute top-0 left-0 -mt-4 ml-4">
-                <span className="text-6xl font-bold text-gray-100 opacity-80">02</span>
-              </div>
-              <div className="relative z-10 text-center">
-                <div className="mb-4 inline-block p-3 bg-green-50 rounded-full">
-                  <MapIcon className="h-8 w-8 text-green-600" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2 text-gray-900">Bản đồ trực quan</h3>
-                <p className="text-gray-600">
-                  Xem vị trí phòng trọ trực quan trên bản đồ, tính khoảng cách đến trường học dễ dàng.
-                </p>
-              </div>
-            </div>
-            
-            {/* Item 3 */}
-            <div className="relative p-8 bg-white rounded-xl shadow-lg border border-gray-100 transition-all duration-300 hover:-translate-y-2 hover:shadow-xl">
-              <div className="absolute top-0 left-0 -mt-4 ml-4">
-                <span className="text-6xl font-bold text-gray-100 opacity-80">03</span>
-              </div>
-              <div className="relative z-10 text-center">
-                <div className="mb-4 inline-block p-3 bg-purple-50 rounded-full">
-                  <ChatBubbleOvalLeftEllipsisIcon className="h-8 w-8 text-purple-600" />
-                </div>
-                <h3 className="text-xl font-semibold mb-2 text-gray-900">Kết nối cộng đồng</h3>
-                <p className="text-gray-600">
-                  Tham gia diễn đàn, đọc review chân thực và kết nối trực tiếp với chủ trọ uy tín.
-                </p>
-              </div>
-            </div>
+            <motion.div 
+              initial={{ opacity: 0, x: 50 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.8 }}
+              className="relative"
+            >
+               <div className="absolute -inset-4 bg-gradient-to-r from-brand-light/30 to-brand-soft/30 rounded-full opacity-50 blur-3xl z-0" />
+               <div className="relative z-10 grid grid-cols-2 gap-4">
+                 <img src="https://images.unsplash.com/photo-1522771753024-5145a8752948?auto=format&fit=crop&w=600&q=80" alt="Room 1" className="rounded-2xl shadow-2xl shadow-brand-main/20 w-full h-64 object-cover mt-12 transform hover:-translate-y-2 transition-transform duration-500" />
+                 <img src="https://images.unsplash.com/photo-1493663284031-b7e3aefcae8e?auto=format&fit=crop&w=600&q=80" alt="Room 2" className="rounded-2xl shadow-2xl shadow-brand-dark/20 w-full h-64 object-cover transform hover:translate-y-2 transition-transform duration-500" />
+               </div>
+            </motion.div>
+
           </div>
         </div>
-      </motion.section>
-      
+      </section>
+
     </div>
   );
 };

@@ -1,63 +1,71 @@
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect, useRef } from 'react'; 
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
 import { notificationAPI, conversationAPI } from '../services/api'; 
+import { motion, AnimatePresence } from 'framer-motion';
 
 import Footer from '../components/Footer';
 
-// --- SVG Icons ---
-const IconMessage: React.FC<{ className?: string }> = ({ className }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-  </svg>
-);
+// --- Heroicons v2 ---
+import { 
+  ChatBubbleOvalLeftEllipsisIcon, 
+  BellIcon, 
+  PlusIcon, 
+  ChevronDownIcon, 
+  UserCircleIcon,
+  ArrowRightOnRectangleIcon,
+  BuildingStorefrontIcon,
+  HomeIcon
+} from '@heroicons/react/24/outline';
 
-const IconBell: React.FC<{ className?: string }> = ({ className }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path>
-    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path>
-  </svg>
-);
-
-const IconChevronDown: React.FC<{ className?: string }> = ({ className }) => (
-  <svg className={className} xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="6 9 12 15 18 9"></polyline>
-  </svg>
-);
+import { 
+  ChatBubbleOvalLeftEllipsisIcon as ChatIconSolid,
+  BellIcon as BellIconSolid 
+} from '@heroicons/react/24/solid';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
-  const isTransparentHeaderPage = location.pathname === '/' || location.pathname === '/room';
+  // === CẤU HÌNH TRANG TRÀN VIỀN ===
+  // Chỉ những trang này Header mới trong suốt đè lên ảnh
+  const immersivePages = ['/', '/room']; 
+  const isImmersivePage = immersivePages.includes(location.pathname);
 
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 20); 
-    };
+    const handleScroll = () => setIsScrolled(window.scrollY > 10);
     window.addEventListener('scroll', handleScroll);
+    
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+
     return () => {
       window.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
 
-  const isSolidHeader = isScrolled || !isTransparentHeaderPage;
+  // Header Solid khi cuộn xuống HOẶC không phải trang tràn viền
+  const isSolidHeader = isScrolled || !isImmersivePage;
   const isActive = (path: string) => location.pathname === path;
 
-  // 1. Query lấy thông báo
+  // Data fetching
   const { data: unreadData } = useQuery({
       queryKey: ['unreadCount'],
       queryFn: () => notificationAPI.getUnreadCount(),
       enabled: !!user,
-      staleTime: 5 * 60 * 1000,
-      refetchOnWindowFocus: true, 
+      staleTime: 5 * 60 * 1000, 
   });
   const unreadCount = unreadData?.data?.data?.count || 0;
 
-  // 2. Query lấy tin nhắn
   const { data: conversations } = useQuery({
     queryKey: ['conversations_check'], 
     queryFn: async () => {
@@ -66,46 +74,38 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     },
     enabled: !!user,
   });
-  
   const hasMessages = conversations && conversations.length > 0;
 
-  // --- CLASS CONSTANTS ---
-  const NAV_LINK_BASE = "inline-flex items-center h-16 px-1 pt-1 border-b-2 text-sm font-bold transition-all duration-300";
-  const NAV_LINK_ACTIVE_SOLID = "border-brand-main text-brand-main";
-  const NAV_LINK_ACTIVE_TRANSPARENT = "border-white text-white";
-  const NAV_LINK_INACTIVE_SOLID = "border-transparent text-gray-600 hover:text-brand-main hover:border-brand-accent/50";
-  const NAV_LINK_INACTIVE_TRANSPARENT = "border-transparent text-white/90 hover:text-white hover:border-white/50";
+  // --- STYLES ---
+  const NAV_LINK = `relative text-sm font-bold transition-all duration-300 hover:opacity-80 flex flex-col items-center gap-1 group`;
 
   return (
-    <div className="flex flex-col min-h-screen bg-brand-light">
+    <div className="flex flex-col min-h-screen bg-primary-50 font-sans selection:bg-brand-main selection:text-white">
       
       <header 
         className={`
-          fixed top-0 left-0 right-0 z-50 transition-all duration-300 ease-in-out
+          fixed top-0 left-0 right-0 z-50 transition-all duration-500 ease-in-out border-b
           ${isSolidHeader 
-            ? 'bg-white/95 backdrop-blur-md shadow-md' 
-            : 'bg-transparent' 
+            ? 'bg-white/95 backdrop-blur-xl shadow-sm border-brand-light/20 py-2 h-20' 
+            : 'bg-transparent border-transparent py-4 h-24' 
           }
         `}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-full">
+          <div className="flex justify-between items-center h-full">
             
-            {/* === LOGO === */}
-            <Link to="/" className="flex-shrink-0 flex items-center group">
-              <div 
-                className={`
-                  text-2xl font-extrabold tracking-tight transition-colors duration-300 flex items-center gap-2
-                  ${isSolidHeader ? 'text-brand-dark' : 'text-white'}
-                `}
-              >
-                <span className="text-3xl group-hover:scale-110 transition-transform duration-300">🏠</span> 
-                <span>RelistayDN</span>
+            {/* === 1. LOGO MỚI === */}
+            <Link to="/" className="flex-shrink-0 flex items-center gap-3 group">
+              <div className={`p-2.5 rounded-xl transition-all duration-500 ${isSolidHeader ? 'bg-brand-main text-white shadow-lg shadow-brand-main/30' : 'bg-white/20 text-white backdrop-blur-md'}`}>
+                <HomeIcon className="w-6 h-6" />
               </div>
+              <span className={`text-2xl font-black tracking-tighter uppercase font-mono ${isSolidHeader ? 'text-transparent bg-clip-text bg-gradient-to-r from-brand-main to-brand-light' : 'text-white drop-shadow-md'}`}>
+                Relistay<span className={isSolidHeader ? 'text-brand-dark' : 'text-white'}>DN</span>
+              </span>
             </Link>
             
-            {/* === NAVIGATION === */}
-            <nav className="hidden md:flex space-x-8">
+            {/* === 2. NAVIGATION === */}
+            <nav className="hidden md:flex items-center gap-8">
               {[
                 { path: '/', label: 'Trang chủ' },
                 { path: '/room', label: 'Tìm phòng' },
@@ -115,166 +115,97 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                 <Link
                   key={link.path}
                   to={link.path}
-                  className={`
-                    ${NAV_LINK_BASE}
-                    ${isActive(link.path) 
-                      ? (isSolidHeader ? NAV_LINK_ACTIVE_SOLID : NAV_LINK_ACTIVE_TRANSPARENT)
-                      : (isSolidHeader ? NAV_LINK_INACTIVE_SOLID : NAV_LINK_INACTIVE_TRANSPARENT)
-                    }
-                  `}
+                  className={`${NAV_LINK} ${isSolidHeader ? (isActive(link.path) ? 'text-brand-main' : 'text-brand-dark/70') : (isActive(link.path) ? 'text-white' : 'text-white/80')}`}
                 >
                   {link.label}
+                  {/* Active Indicator: Dùng Brand Accent (Vàng) để nổi bật */}
+                  <span className={`h-1 w-1 rounded-full mt-0.5 transition-all duration-300 ${
+                      isActive(link.path) 
+                        ? (isSolidHeader ? 'bg-brand-accent w-5' : 'bg-white w-5') 
+                        : 'bg-transparent w-0 group-hover:w-1.5 group-hover:bg-current'
+                  }`}></span>
                 </Link>
               ))}
             </nav>
 
-            {/* === USER MENU === */}
-            <div className="flex items-center space-x-4">
+            {/* === 3. USER ACTIONS === */}
+            <div className="flex items-center gap-3">
               {user ? (
-                <div className="flex items-center space-x-3">
-                  {/* Nút Đăng tin */}
+                <>
                   {user.role === 'landlord' && (
-                    <Link
-                      to="/landlord/dang-tin"
-                      className={`
-                        px-4 py-2 rounded-full text-sm font-bold shadow-md transition-all transform hover:scale-105 hidden sm:block
-                        ${isSolidHeader 
-                            ? 'bg-brand-main text-white hover:bg-brand-dark' 
-                            : 'bg-white text-brand-main hover:bg-gray-100'
-                        }
-                      `}
-                    >
-                      Đăng tin mới
+                    /* Nút Đăng tin: Dùng Brand Accent (Vàng) để thôi thúc hành động */
+                    <Link to="/landlord/dang-tin" className="hidden sm:flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-brand-accent/20 transition-all hover:scale-105 active:scale-95 bg-brand-accent hover:bg-yellow-600 text-white mr-2">
+                      <PlusIcon className="w-5 h-5 stroke-2" />
+                      <span>Đăng tin</span>
                     </Link>
                   )}
                   
-                  {/* === ICON TIN NHẮN === */}
-                  <Link 
-                    to="/chat"
-                    className={`
-                        relative p-2 rounded-full focus:outline-none transition-colors duration-300
-                        ${isSolidHeader 
-                        ? 'text-gray-600 hover:bg-brand-light hover:text-brand-main' 
-                        : 'text-white hover:bg-white/20'
-                        }
-                    `}
-                  >
-                    <IconMessage className="h-6 w-6" />
-                    {hasMessages && (
-                        <span className="absolute top-2 right-2 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
-                    )}
+                  <Link to="/chat" className={`relative p-2.5 rounded-full transition-all duration-300 group ${isSolidHeader ? 'hover:bg-brand-light/10 text-brand-dark hover:text-brand-main' : 'hover:bg-white/20 text-white'}`}>
+                    {hasMessages ? <ChatIconSolid className="w-6 h-6" /> : <ChatBubbleOvalLeftEllipsisIcon className="w-6 h-6" />}
+                    {hasMessages && <span className="absolute top-2 right-2.5 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse"></span>}
                   </Link>
 
-                  {/* === ICON THÔNG BÁO (Đã cập nhật chấm đỏ) === */}
-                  <Link 
-                    to="/notifications"
-                    className={`
-                        relative p-2 rounded-full focus:outline-none transition-colors duration-300
-                        ${isSolidHeader 
-                        ? 'text-gray-600 hover:bg-brand-light hover:text-brand-main' 
-                        : 'text-white hover:bg-white/20'
-                        }
-                    `}
-                  >
-                    <IconBell className="h-6 w-6" />
-                    
-                    {/* SỬA ĐỔI: Thay hiển thị số bằng chấm đỏ */}
-                    {unreadCount > 0 && (
-                         <span className="absolute top-1.5 right-2 block h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white"></span>
-                    )}
+                  <Link to="/notifications" className={`relative p-2.5 rounded-full transition-all duration-300 group ${isSolidHeader ? 'hover:bg-brand-light/10 text-brand-dark hover:text-brand-main' : 'hover:bg-white/20 text-white'}`}>
+                    {unreadCount > 0 ? <BellIconSolid className="w-6 h-6" /> : <BellIcon className="w-6 h-6" />}
+                    {unreadCount > 0 && <span className="absolute top-2.5 right-3 w-2 h-2 bg-red-500 rounded-full ring-2 ring-white"></span>}
                   </Link>
                   
-                  {/* Profile Dropdown */}
-                  <div className="relative">
+                  {/* === PROFILE DROPDOWN === */}
+                  <div className="relative ml-1" ref={dropdownRef}>
                     <button 
-                      onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
-                      className="flex items-center space-x-1 rounded-full focus:outline-none group"
+                        onClick={() => setIsDropdownOpen(!isDropdownOpen)} 
+                        className={`flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-all duration-300 ${isSolidHeader ? 'border-brand-light/30 bg-white hover:shadow-md' : 'border-white/30 bg-white/10 backdrop-blur-md text-white hover:bg-white/20'}`}
                     >
                       <img 
-                        className={`h-9 w-9 rounded-full object-cover border-2 transition-colors ${isSolidHeader ? 'border-brand-accent' : 'border-white/80'}`}
+                        className="h-9 w-9 rounded-full object-cover border-2 border-white shadow-sm" 
                         src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=random`} 
                         alt={user.name} 
-                        onError={(e) => (e.currentTarget.src = `https://placehold.co/40x40/E2E8F0/718096?text=${user.name[0]}`)}
+                        onError={(e) => (e.currentTarget.src = `https://placehold.co/40x40/E2E8F0/718096?text=${user.name[0]}`)} 
                       />
-                      <IconChevronDown 
-                        className={`
-                          h-4 w-4 transition-colors duration-300
-                          ${isSolidHeader ? 'text-gray-600 group-hover:text-brand-main' : 'text-white group-hover:text-gray-200'}
-                        `} 
-                      />
+                      <ChevronDownIcon className={`w-4 h-4 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''} ${isSolidHeader ? 'text-brand-dark' : 'text-white/80'}`} />
                     </button>
 
-                    {isDropdownOpen && (
-                      <div 
-                        className="absolute right-0 mt-2 w-64 origin-top-right rounded-xl shadow-xl bg-white ring-1 ring-black ring-opacity-5 focus:outline-none overflow-hidden animate-fadeIn z-50"
-                        onMouseLeave={() => setIsDropdownOpen(false)} 
-                      >
-                        <div className="px-4 py-4 border-b border-brand-accent/20 bg-brand-light/30">
-                          <p className="text-sm font-bold text-brand-dark truncate">{user.name}</p>
-                          <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                        </div>
-                        
-                        <div className="py-1">
-                          <Link
-                            to="/profile"
-                            className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-brand-light hover:text-brand-main transition-colors"
-                            onClick={() => setIsDropdownOpen(false)}
-                          >
-                            👤 Trang cá nhân
-                          </Link>
-                          {user.role === 'landlord' && (
-                            <Link
-                              to="/landlord/dang-tin"
-                              className="block sm:hidden px-4 py-2.5 text-sm text-gray-700 hover:bg-brand-light hover:text-brand-main transition-colors" 
-                              onClick={() => setIsDropdownOpen(false)}
-                            >
-                              📝 Đăng tin mới
-                            </Link>
-                          )}
-                          
-                          <div className="border-t border-gray-100 my-1"></div>
-                          <button
-                            onClick={() => {
-                              logout();
-                              setIsDropdownOpen(false);
-                            }}
-                            className="block w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 transition-colors font-medium"
-                          >
-                            🚪 Đăng xuất
-                          </button>
-                        </div>
-                      </div>
-                    )}
+                    <AnimatePresence>
+                        {isDropdownOpen && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                            transition={{ duration: 0.2 }}
+                            className="absolute right-0 mt-3 w-72 origin-top-right rounded-2xl shadow-2xl shadow-brand-main/10 bg-white ring-1 ring-black/5 focus:outline-none overflow-hidden z-50 border border-brand-light/10"
+                        >
+                            <div className="px-5 py-5 bg-gradient-to-br from-brand-main/5 to-brand-light/10 border-b border-brand-light/20 flex items-center gap-3">
+                                <img className="h-12 w-12 rounded-full object-cover border-2 border-white shadow-md" src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} alt="" />
+                                <div className="overflow-hidden">
+                                    <p className="text-base font-bold text-brand-dark truncate">{user.name}</p>
+                                    <p className="text-xs text-gray-500 truncate font-medium">{user.email}</p>
+                                </div>
+                            </div>
+                            <div className="p-2 space-y-1">
+                                <Link to="/profile" className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 rounded-xl hover:bg-brand-light/10 hover:text-brand-main transition-colors" onClick={() => setIsDropdownOpen(false)}>
+                                    <UserCircleIcon className="w-5 h-5 text-gray-400 group-hover:text-brand-main" /> Hồ sơ cá nhân
+                                </Link>
+                                {user.role === 'landlord' && (
+                                    <Link to="/landlord/dang-tin" className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-gray-700 rounded-xl hover:bg-brand-light/10 hover:text-brand-main transition-colors" onClick={() => setIsDropdownOpen(false)}>
+                                        <BuildingStorefrontIcon className="w-5 h-5 text-gray-400 group-hover:text-brand-main" /> Quản lý tin đăng
+                                    </Link>
+                                )}
+                            </div>
+                            <div className="p-2 border-t border-gray-100 bg-gray-50/50">
+                                <button onClick={() => { logout(); setIsDropdownOpen(false); }} className="flex w-full items-center gap-3 px-3 py-2.5 text-sm font-bold text-red-600 rounded-xl hover:bg-red-50 transition-colors">
+                                    <ArrowRightOnRectangleIcon className="w-5 h-5" /> Đăng xuất
+                                </button>
+                            </div>
+                        </motion.div>
+                        )}
+                    </AnimatePresence>
                   </div>
-                </div>
+                </>
               ) : (
-                
-                // Nút Login/Register
-                <div className="flex items-center space-x-4">
-                  <Link
-                    to="/login"
-                    className={`
-                      text-sm font-bold transition-colors
-                      ${isSolidHeader 
-                        ? 'text-gray-600 hover:text-brand-main' 
-                        : 'text-white hover:text-gray-200'
-                      }
-                    `}
-                  >
-                    Đăng nhập
-                  </Link>
-                  <Link
-                    to="/register"
-                    className={`
-                        px-5 py-2.5 rounded-full text-sm font-bold shadow-lg transition-all transform hover:scale-105
-                        ${isSolidHeader
-                            ? 'bg-brand-main text-white hover:bg-brand-dark'
-                            : 'bg-white text-brand-main hover:bg-gray-100'
-                        }
-                    `}
-                  >
-                    Đăng ký ngay
-                  </Link>
+                <div className="flex items-center gap-3">
+                  <Link to="/login" className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all ${isSolidHeader ? 'text-gray-600 hover:bg-gray-100' : 'text-white hover:bg-white/20'}`}>Đăng nhập</Link>
+                  {/* Nút Đăng ký: Brand Main */}
+                  <Link to="/register" className={`px-6 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-brand-main/20 transition-all transform hover:scale-105 active:scale-95 ${isSolidHeader ? 'bg-brand-main text-white hover:bg-brand-dark' : 'bg-white text-brand-main hover:bg-gray-100'}`}>Đăng ký ngay</Link>
                 </div>
               )}
             </div>
@@ -282,12 +213,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
         </div>
       </header>
 
-      <main className={`flex-grow ${isTransparentHeaderPage ? '' : 'pt-20 pb-8'}`}>
+      {/* === FIX KHOẢNG TRẮNG === */}
+      <main className={`flex-grow ${isImmersivePage ? '' : 'pt-20'}`}>
         {children}
       </main>
 
       <Footer />
-      
     </div>
   );
 };

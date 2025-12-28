@@ -5,303 +5,240 @@ import imageCompression from 'browser-image-compression';
 import axios from 'axios';
 import { forumAPI, type ForumPost, type ApiResponse } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
-import { FaImage, FaTimes } from 'react-icons/fa';
 import { type AxiosResponse } from 'axios';
 import toast from 'react-hot-toast';
 
+// --- Icons (Heroicons) ---
+import { 
+  PhotoIcon, 
+  XMarkIcon, 
+  PaperAirplaneIcon, 
+  ChatBubbleBottomCenterTextIcon
+} from '@heroicons/react/24/outline';
 
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-
+// Mặc định backend vẫn cần type này, nhưng UI sẽ ẩn đi
 type PostCategory = "question" | "experience" | "general";
 
 interface NewPostVariables {
-  title: string;
-  content: string;
-  tags: string[];
-  images: string[];
-  category: PostCategory;
+  title: string;
+  content: string;
+  tags: string[];
+  images: string[];
+  category: PostCategory;
 }
 
+// --- STYLES CONSTANTS ---
+const CONTAINER_CLASS = "max-w-3xl mx-auto py-10 px-4 sm:px-6";
+const CARD_CLASS = "bg-white rounded-3xl shadow-xl shadow-brand-main/10 border border-brand-light/20 overflow-hidden";
+const HEADER_CLASS = "bg-brand-main px-8 py-6 text-white"; 
+const INPUT_CLASS = "w-full px-4 py-3 rounded-xl border border-brand-light/30 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-main/20 focus:border-brand-main transition-all font-bold text-lg text-brand-dark placeholder-gray-400";
+const TEXTAREA_CLASS = "w-full px-4 py-3 rounded-xl border border-brand-light/30 bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-main/20 focus:border-brand-main transition-all text-base text-gray-700 placeholder-gray-400 min-h-[200px] resize-y";
+
 const NewPost: React.FC = () => {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [category, setCategory] = useState<PostCategory | ''>(''); 
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  // Mặc định là 'general'
+  const [category] = useState<PostCategory>('general'); 
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [isUploading, setIsUploading] = useState(false); 
-  
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [isUploading, setIsUploading] = useState(false); 
 
-  const { mutate: createPost, isPending, error } = useMutation<
-    
-    AxiosResponse<ApiResponse<ForumPost>>,
-    any,
-    NewPostVariables
-  >({
-    mutationFn: forumAPI.createPost,
-    onSuccess: (response) => {
-      
-      toast.success(response.data.message || 'Bài viết của bạn đã được gửi và đang chờ duyệt!', {
-        // Tùy chọn thời gian tự động đóng
-        duration: 4000
-      });
-      navigate('/forum');
-    },
-    onError: (err: any) => {
-      
-      const errorMessage = 'Lỗi: ' + (err.response?.data?.message || err.message);
-      toast.error(errorMessage);
-    }
-  });
+  const { mutate: createPost, isPending } = useMutation<
+    AxiosResponse<ApiResponse<ForumPost>>,
+    any,
+    NewPostVariables
+  >({
+    mutationFn: forumAPI.createPost,
+    onSuccess: (response) => {
+      toast.success(response.data.message || 'Bài viết đã được gửi và đang chờ duyệt!', { duration: 4000 });
+      navigate('/forum');
+    },
+    onError: (err: any) => {
+      const errorMessage = 'Lỗi: ' + (err.response?.data?.message || err.message);
+      toast.error(errorMessage);
+    }
+  });
 
-  // === HÀM XỬ LÝ KHI CHỌN FILE (Giữ nguyên) ===
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files);
-      setSelectedFiles(prevFiles => [...prevFiles, ...files]);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const files = Array.from(e.target.files);
+      setSelectedFiles(prevFiles => [...prevFiles, ...files]);
+      const newPreviews = files.map(file => URL.createObjectURL(file));
+      setImagePreviews(prevPreviews => [...prevPreviews, ...newPreviews]);
+    }
+    e.target.value = '';
+  };
 
-      // Tạo preview
-      const newPreviews = files.map(file => URL.createObjectURL(file));
-      setImagePreviews(prevPreviews => [...prevPreviews, ...newPreviews]);
-    }
-    // Reset file input để có thể chọn lại file giống nhau
-    e.target.value = '';
-  };
+  const handleRemoveImage = (index: number) => {
+    setSelectedFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
+    setImagePreviews(prevPreviews => {
+      const newPreviews = prevPreviews.filter((_, i) => i !== index);
+      URL.revokeObjectURL(prevPreviews[index]);
+      return newPreviews;
+    });
+  };
 
-  // === HÀM XOÁ ẢNH (Giữ nguyên) ===
-  const handleRemoveImage = (index: number) => {
-    // Xoá file
-    setSelectedFiles(prevFiles => prevFiles.filter((_, i) => i !== index));
-    
-    // Xoá preview
-    setImagePreviews(prevPreviews => {
-      const newPreviews = prevPreviews.filter((_, i) => i !== index);
-      // Thu hồi Object URL để tránh rò rỉ bộ nhớ
-      URL.revokeObjectURL(prevPreviews[index]);
-      return newPreviews;
-    });
-  };
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return toast.error('Bạn cần đăng nhập để tạo bài viết.');
+    if (!title.trim() || !content.trim()) return toast.error('Tiêu đề và nội dung không được để trống.');
 
-  // === CẬP NHẬT HÀM SUBMIT ===
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user) {
-      
-      toast.error('Bạn cần đăng nhập để tạo bài viết.');
-      return;
-    }
-    
-    if (!category) {
-      
-      toast.error('Vui lòng chọn chủ đề cho bài viết.');
-      return;
-    }
+    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
+      toast.error('Lỗi cấu hình hệ thống.');
+      return;
+    }
 
-    // === KIỂM TRA BIẾN MÔI TRƯỜNG ===
-    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-      
-      toast.error('Lỗi cấu hình: Vui lòng kiểm tra lại file .env (Cloudinary) và khởi động lại server frontend.');
-      setIsUploading(false);
-      return;
-    }
+    let imageUrls: string[] = [];
 
-    let imageUrls: string[] = [];
+    if (selectedFiles.length > 0) {
+      setIsUploading(true);
+      const loadingToast = toast.loading('Đang xử lý hình ảnh...');
+      
+      try {
+        const compressionOptions = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
+        const filesArray = Array.from(selectedFiles);
+        const compressedFiles = await Promise.all(filesArray.map(file => imageCompression(file, compressionOptions)));
 
-    // --- Tải ảnh lên trước (nếu có) ---
-    if (selectedFiles.length > 0) {
-      setIsUploading(true);
-      // Thêm toast loading để thông báo cho người dùng
-      const loadingToast = toast.loading('Đang nén và tải ảnh lên Cloudinary...');
-      
-      try {
-        // === NÉN ẢNH & TẢI ẢNH (Giữ nguyên) ===
-        console.log('Bắt đầu nén ảnh...');
-        const compressionOptions = {
-          maxSizeMB: 1,
-          maxWidthOrHeight: 1920,
-          useWebWorker: true,
-        };
-        
-        const filesArray = Array.from(selectedFiles);
-        const compressedFiles = await Promise.all(
-          filesArray.map(file => imageCompression(file, compressionOptions))
-        );
-        console.log('Đã nén xong. Đang tải ảnh lên Cloudinary...');
+        const uploadPromises = compressedFiles.map(file => {
+          const formDataUpload = new FormData();
+          formDataUpload.append('file', file);
+          formDataUpload.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+          return axios.post(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, formDataUpload);
+        });
+        
+        const uploadResults = await Promise.all(uploadPromises);
+        imageUrls = uploadResults.map(res => res.data.secure_url);
+        toast.success('Tải ảnh thành công!', { id: loadingToast });
+      } catch (uploadError: any) {
+        toast.error('Lỗi tải ảnh, vui lòng thử lại.', { id: loadingToast });
+        setIsUploading(false);
+        return;
+      }
+      setIsUploading(false);
+    }
 
-        const uploadPromises = compressedFiles.map(file => {
-          const formDataUpload = new FormData();
-          formDataUpload.append('file', file);
-          formDataUpload.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-          
-          return axios.post(
-            `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-            formDataUpload
-          );
-        });
-        
-        const uploadResults = await Promise.all(uploadPromises);
-        imageUrls = uploadResults.map(res => res.data.secure_url);
+    createPost({ title, content, tags: [], images: imageUrls, category }); 
+  };
 
-        if (imageUrls.length === 0) {
-            throw new Error("Upload thất bại, không nhận được URL nào từ Cloudinary.");
-        }
-        // Tắt toast loading thành công
-        toast.success('Tải ảnh hoàn tất!', { id: loadingToast, duration: 2000 });
-      } catch (uploadError: any) {
-        console.error("Lỗi nén hoặc tải ảnh:", uploadError);
-        // === THAY ĐỔI 7: THAY  BẰNG toast.error và tắt toast loading ===
-        const uploadErrorMessage = 'Lỗi khi tải ảnh lên: ' + (uploadError.response?.data?.error?.message || uploadError.message || 'Lỗi khi tải ảnh lên Cloudinary.');
-        toast.error(uploadErrorMessage, { id: loadingToast });
-        setIsUploading(false);
-        return; // Dừng lại nếu upload lỗi
-      }
-      
-      setIsUploading(false);
-    }
-    // ------------------------------------------
+  if (!user) return <div className="text-center p-12 text-gray-500">Vui lòng đăng nhập để tiếp tục.</div>;
 
-    // --- Tạo bài viết với mảng URL ảnh (Giữ nguyên) ---
-    console.log('Đang tạo bài viết với URLs:', imageUrls);
-    createPost({ 
-      title, 
-      content, 
-      tags: [],
-      images: imageUrls,
-      category 
-    }); 
-  };
-  // ===================================================
+  return (
+    <div className={CONTAINER_CLASS}>
+      <div className={CARD_CLASS}>
+        
+        {/* HEADER */}
+        <div className={HEADER_CLASS}>
+            <h1 className="text-2xl font-bold flex items-center gap-3">
+                <ChatBubbleBottomCenterTextIcon className="w-8 h-8 opacity-80" />
+                Tạo thảo luận mới
+            </h1>
+            <p className="text-brand-light/90 text-sm mt-1 ml-11">Chia sẻ câu hỏi hoặc kinh nghiệm của bạn với cộng đồng</p>
+        </div>
 
-  const handleImageClick = () => {
-    fileInputRef.current?.click();
-  };
+        {/* BODY */}
+        <form onSubmit={handleSubmit} className="p-8 space-y-6">
+            
+            {/* User Info (Đã bỏ Category Select) */}
+            <div className="flex items-center gap-3 pb-4 border-b border-gray-100">
+                <img 
+                    className="w-12 h-12 rounded-full object-cover border-2 border-brand-accent" 
+                    src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}`} 
+                    alt={user.name} 
+                />
+                <div>
+                    <p className="font-bold text-brand-dark text-lg">{user.name}</p>
+                    <p className="text-sm text-gray-500">Đang viết bài...</p>
+                </div>
+            </div>
 
-  if (!user) {
-    return <div className="text-center p-8">Vui lòng đăng nhập để tạo bài viết.</div>;
-  }
-// JSX giữ nguyên...
-  return (
-    <div className="max-w-2xl mx-auto">
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow p-4 sm:p-6 space-y-4">
-        <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-800">Tạo bài viết</h1>
-        </div>
-        <hr/>
-        <div className="flex items-center space-x-3">
-          <img 
-            className="w-10 h-10 rounded-full object-cover" 
-            src={user.avatar || `https://ui-avatars.com/api/?name=${user.name}&background=random`} 
-            alt={user.name} 
-          />
-          <div>
-            <p className="font-semibold text-gray-800">{user.name}</p>
-            <p className="text-xs text-gray-500">Đăng vào: {new Date().toLocaleDateString('vi-VN')}</p>
-          </div>
-        </div>
+            {/* Inputs */}
+            <div className="space-y-4">
+                <div className="space-y-2">
+                    <label className="text-sm font-bold text-brand-dark ml-1">Tiêu đề <span className="text-red-500">*</span></label>
+                    <input
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        className={INPUT_CLASS}
+                        placeholder="Tóm tắt nội dung chính..."
+                        required
+                    />
+                </div>
 
-        <div className="space-y-2">
-           <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full text-lg font-semibold border-none focus:ring-0 p-2"
-            required
-            placeholder="Tiêu đề bài viết..."
-          />
+                <div className="space-y-2">
+                    <label className="text-sm font-bold text-brand-dark ml-1">Nội dung chi tiết <span className="text-red-500">*</span></label>
+                    <textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        className={TEXTAREA_CLASS}
+                        required
+                        placeholder="Viết chi tiết câu hỏi hoặc chia sẻ của bạn tại đây..."
+                    />
+                </div>
+            </div>
 
-          <select
-            value={category}
-            // Thêm ép kiểu (as) để báo cho TypeScript biết giá trị này là hợp lệ
-            onChange={(e) => setCategory(e.target.value as PostCategory | '')}
-            className="w-full border-gray-300 rounded-md shadow-sm focus:border-primary-500 focus:ring-primary-500 p-2 bg-gray-50"
-            required
-          >
-            <option value="" disabled>-- Chọn chủ đề --</option>
-            {/* Các 'value' phải khớp chính xác với kiểu PostCategory */}
-            <option value="question">Hỏi đáp</option>
-            <option value="experience">Chia sẻ</option>
-            <option value="general">Khác</option>
-          </select>
-          {/* ------------------------------------- */}
+            {/* Image Upload Area */}
+            <div className="space-y-2">
+                <label className="text-sm font-bold text-brand-dark ml-1 flex items-center gap-2">
+                    <PhotoIcon className="w-5 h-5 text-brand-accent" /> Hình ảnh đính kèm
+                </label>
+                
+                {/* Upload Box */}
+                <div 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-brand-light/30 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-brand-light/5 hover:border-brand-main transition-all group"
+                >
+                    <div className="w-12 h-12 bg-brand-light/10 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform">
+                        <PhotoIcon className="w-6 h-6 text-brand-main" />
+                    </div>
+                    <p className="text-sm font-medium text-gray-600 group-hover:text-brand-main">Nhấn để tải ảnh lên</p>
+                    <p className="text-xs text-gray-400 mt-1">Hỗ trợ JPG, PNG (Tối đa 5MB)</p>
+                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" multiple onChange={handleFileChange} />
+                </div>
 
-          <textarea
-            rows={5}
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            className="w-full border-none focus:ring-0 p-2"
-            required
-            placeholder={`${user.name} ơi, bạn đang nghĩ gì thế?`}
-          />
-        </div>
+                {/* Preview Grid */}
+                {imagePreviews.length > 0 && (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3 mt-4">
+                        {imagePreviews.map((previewUrl, index) => (
+                            <div key={index} className="relative group aspect-square rounded-xl overflow-hidden border border-gray-200">
+                                <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveImage(index)}
+                                    className="absolute top-1 right-1 bg-white/90 text-red-500 p-1 rounded-full shadow-sm hover:bg-red-50 transition-colors"
+                                >
+                                    <XMarkIcon className="w-4 h-4" />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
-        <div className="border rounded-lg p-3">
-          <div className="flex justify-between items-center">
-            <span className="text-gray-600 font-medium">Thêm vào bài viết của bạn</span>
-            <button type="button" onClick={handleImageClick} className="text-green-500 hover:text-green-600 text-2xl">
-                <FaImage />
-            </button>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              className="hidden" 
-              accept="image/*" 
-              multiple 
-              onChange={handleFileChange}
-            />
-          </div>
-          
-          {/* === HIỂN THỊ PREVIEW ẢNH === */}
-          {imagePreviews.length > 0 && (
-            <div className="mt-4 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-              {imagePreviews.map((previewUrl, index) => (
-                <div key={index} className="relative group">
-                  <img 
-                    src={previewUrl} 
-                    alt={`Xem trước ${index + 1}`} 
-                    className="h-24 w-full object-cover rounded-md border" 
-                    onLoad={() => {
-                      // Thu hồi URL cũ sau khi ảnh đã tải xong để tiết kiệm bộ nhớ
-                      if (previewUrl.startsWith('blob:')) {
-                        URL.revokeObjectURL(previewUrl);
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveImage(index)}
-                    className="absolute top-0 right-0 m-1 p-0.5 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75"
-                    aria-label="Xoá ảnh"
-                  >
-                    <FaTimes className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+            {/* Footer Action */}
+            <div className="pt-4">
+                <button
+                    type="submit"
+                    disabled={isPending || isUploading}
+                    className="w-full py-4 bg-brand-accent hover:bg-yellow-600 text-white text-lg font-bold rounded-xl shadow-lg shadow-brand-accent/30 flex items-center justify-center gap-2 transition-all transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                >
+                    {isUploading ? 'Đang tải ảnh...' : isPending ? 'Đang đăng bài...' : (
+                        <>Đăng bài ngay <PaperAirplaneIcon className="w-5 h-5 -rotate-45 mb-1" /></>
+                    )}
+                </button>
+            </div>
 
-        {error && (
-          <div className="text-red-600 text-sm">
-            
-            Lỗi: {error instanceof Error ? error.message : String(error)}
-          </div>
-        )}
-
-        <button
-          type="submit"
-          className="w-full btn-primary disabled:opacity-50"
-          disabled={isPending || isUploading}
-        >
-          {isUploading ? 'Đang tải ảnh...' : (isPending ? 'Đang gửi...' : 'Đăng bài')}
-        </button>
-      </form>
-    </div>
-  );
+        </form>
+      </div>
+    </div>
+  );
 };
 
 export default NewPost;

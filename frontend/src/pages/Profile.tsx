@@ -6,695 +6,473 @@ import type { User, Room, ForumPost } from '../types';
 import axios from 'axios';
 import imageCompression from 'browser-image-compression';
 import { Link, useNavigate } from 'react-router-dom';
-import { toast, Toaster } from 'react-hot-toast'; // 1. Import Toast
+import { toast, Toaster } from 'react-hot-toast';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Icons
 import { 
-  UserIcon, 
-  HomeModernIcon, 
-  ChatBubbleBottomCenterTextIcon, 
-  KeyIcon, 
-  CameraIcon,
-  XMarkIcon,
-  CheckIcon,
-  ArrowPathIcon,
-  PencilIcon, 
-  TrashIcon,
-  ShieldCheckIcon, 
-  DocumentArrowUpIcon, 
-  ClockIcon 
+  UserIcon, 
+  HomeModernIcon, 
+  ChatBubbleBottomCenterTextIcon, 
+  KeyIcon, 
+  CameraIcon,
+  XMarkIcon,
+  CheckIcon,
+  ArrowPathIcon,
+  PencilIcon, 
+  TrashIcon,
+  ShieldCheckIcon, 
+  DocumentArrowUpIcon, 
+  ClockIcon,
+  ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 
-// Lấy biến môi trường
+// Env
 const CLOUDINARY_CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
-// Thêm tab 'verification'
 type ActiveTab = 'profile' | 'my-rooms' | 'my-posts' | 'password' | 'verification';
 
-// Style chung
-const INPUT_CLASS = "input-field w-full px-3 py-2 border border-brand-accent rounded-md focus:outline-none focus:ring-2 focus:ring-brand-main focus:border-transparent text-brand-dark placeholder-gray-400";
-const BUTTON_PRIMARY_CLASS = "px-4 py-2 bg-brand-main hover:bg-brand-dark text-white rounded-md shadow-sm transition-colors font-medium disabled:opacity-70 flex items-center justify-center gap-2";
-const BUTTON_SECONDARY_CLASS = "px-4 py-2 bg-white border border-brand-accent text-brand-main hover:bg-brand-light rounded-md transition-colors font-medium";
+// --- STYLES CONSTANTS (UPDATED COLOR PALETTE) ---
+// Nền trang dùng tông brand-light/10 hoặc primary-50
+const PAGE_WRAPPER = "min-h-screen bg-primary-50 py-8 px-4 sm:px-6 lg:px-8";
+// Card dùng hiệu ứng kính nhưng viền màu brand-light
+const GLASS_CARD = "bg-white/90 backdrop-blur-xl rounded-3xl shadow-xl shadow-brand-main/5 border border-brand-light/20 overflow-hidden";
+// Input focus dùng brand-main
+const INPUT_CLASS = "w-full px-4 py-3 rounded-xl border border-gray-200 bg-white focus:bg-white focus:outline-none focus:ring-2 focus:ring-brand-main/20 focus:border-brand-main transition-all font-medium text-brand-dark";
+// Button chính dùng brand-main
+const BUTTON_PRIMARY = "px-6 py-2.5 bg-brand-main text-white rounded-xl shadow-lg shadow-brand-main/30 hover:bg-brand-dark hover:scale-[1.02] active:scale-[0.98] transition-all font-bold flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed";
+// Button phụ
+const BUTTON_SECONDARY = "px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-brand-main/50 transition-all font-bold flex items-center justify-center gap-2";
 
-// --- CÁC COMPONENT CON (Giữ nguyên LandlordRooms và MyPostsList) ---
+// --- COMPONENT CON: QUẢN LÝ PHÒNG (LANDLORD) ---
 const LandlordRooms: React.FC<{ userId: string }> = ({ userId }) => {
-    const queryClient = useQueryClient();
-    const navigate = useNavigate();
-  
-    const { data: roomsResponse, isLoading: isLoadingRooms } = useQuery({
-      queryKey: ['myRooms', userId],
-      queryFn: async () => (await roomAPI.getMyRooms()).data,
-      enabled: !!userId, 
-      staleTime: 5 * 60 * 1000,
-    });
-  
-    const rooms: Room[] = roomsResponse?.data ?? [];
-  
-    const deleteRoomMutation = useMutation({
-      mutationFn: (roomId: string) => roomAPI.deleteRoom(roomId),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['myRooms', userId] });
-        toast.success('Xóa phòng thành công!'); 
-      },
-      onError: (error: any) => toast.error(error.response?.data?.message || 'Xóa phòng thất bại.')
-    });
-  
-    const updateAvailabilityMutation = useMutation({
-          mutationFn: ({ roomId, isAvailable }: { roomId: string; isAvailable: boolean }) =>
-              roomAPI.updateRoom(roomId, { isAvailable }),
-          onSuccess: () => {
-              queryClient.invalidateQueries({ queryKey: ['myRooms', userId] });
-              toast.success('Cập nhật trạng thái phòng thành công');
-          },
-          onError: (error: any) => {
-              console.error("Lỗi cập nhật trạng thái:", error);
-              toast.error(error.response?.data?.message || 'Cập nhật thất bại.');
-          }
-      });
-  
-    const handleDelete = (roomId: string) => {
-      if (window.confirm('Bạn có chắc chắn muốn xóa phòng này?')) {
-        deleteRoomMutation.mutate(roomId);
-      }
-    };
-  
-    const handleToggleAvailability = (roomId: string, currentAvailability: boolean) => {
-          updateAvailabilityMutation.mutate({ roomId, isAvailable: !currentAvailability });
-      };
-  
-    if (isLoadingRooms) return <div className="text-center p-4 text-brand-dark">Đang tải danh sách phòng...</div>;
-  
-    return (
-      <div className="bg-white p-6 rounded-xl shadow border border-brand-accent/30">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4 border-b border-brand-accent/20 pb-4">
-          <h2 className="text-xl font-bold text-brand-dark">Quản lý tin đăng ({rooms.length})</h2>
-          <Link to="/landlord/dang-tin" className={BUTTON_PRIMARY_CLASS}>Đăng tin mới</Link>
-        </div>
-        {rooms.length === 0 ? (
-          <div className="text-center py-8 bg-brand-light/30 rounded-lg border border-dashed border-brand-accent">
-              <p className="text-gray-600 mb-4">Bạn chưa đăng tin nào.</p>
-              <Link to="/landlord/dang-tin" className="text-brand-main hover:underline font-medium">Đăng tin ngay</Link>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {rooms.map((room) => (
-              <div key={room._id} className="border border-brand-accent/30 p-4 rounded-lg flex flex-col md:flex-row items-start gap-4 hover:bg-brand-light/20 transition-colors shadow-sm">
-                <div className="flex gap-4 flex-grow w-full md:w-auto">
-                      <img src={room.images?.[0] || 'https://placehold.co/100x80/eee/ccc?text=No+Image'} alt={room.title} className="w-24 h-24 object-cover rounded-md border-4 border-brand-accent/20 bg-gray-100 flex-shrink-0" onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = 'https://placehold.co/100x80/eee/ccc?text=Error'; }} />
-                      <div className="flex-grow min-w-0 space-y-1">
-                        <Link to={`/room/${room._id}`} className="font-semibold text-brand-dark hover:text-brand-main line-clamp-1 text-lg block">{room.title}</Link>
-                        <p className="text-sm text-gray-500 line-clamp-1">📍 {room.address}, {room.district}</p>
-                        <p className="text-sm font-medium text-gray-700">
-                           <span className="text-brand-main text-base font-bold">{(room.price || 0).toLocaleString('vi-VN')} đ</span><span className="text-brand-accent mx-2">|</span><span>{room.area || '?'} m²</span>
-                        </p>
-                         <div className="flex items-center gap-2 mt-2 flex-wrap">
-                             <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${room.status === 'approved' ? 'bg-green-50 text-green-700 border-green-200' : room.status === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : 'bg-red-50 text-red-700 border-red-200'}`}>{room.status === 'approved' ? 'Đã duyệt' : room.status === 'pending' ? 'Chờ duyệt' : 'Bị từ chối'}</span>
-                             <span className={`px-2 py-0.5 rounded text-xs font-semibold border ${room.isAvailable ? 'bg-brand-light text-brand-main border-brand-accent' : 'bg-gray-100 text-gray-600 border-gray-300'}`}>{room.isAvailable ? 'Còn trống' : 'Đã thuê'}</span>
-                         </div>
-                      </div>
-                </div>
-                <div className="flex flex-row md:flex-col gap-2 w-full md:w-auto md:ml-auto justify-end">
-                  <button onClick={() => navigate(`/landlord/edit-room/${room._id}`)} className="btn-sm text-brand-main bg-white border border-brand-accent hover:bg-brand-light w-full md:w-auto text-center px-3 py-1 rounded">Sửa</button>
-                  <button onClick={() => handleToggleAvailability(room._id, room.isAvailable)} disabled={updateAvailabilityMutation.isPending} className="btn-sm w-full md:w-auto text-center border bg-brand-light/50 hover:bg-brand-light text-brand-dark border-brand-accent px-3 py-1 rounded">{room.isAvailable ? 'Đã thuê?' : 'Còn trống?'}</button>
-                  <button onClick={() => handleDelete(room._id)} disabled={deleteRoomMutation.isPending} className="btn-sm bg-white border border-red-200 text-red-600 hover:bg-red-50 w-full md:w-auto text-center px-3 py-1 rounded">Xóa</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
-};
-
-const MyPostsList: React.FC<{ userId: string }> = ({ userId }) => {
-    const queryClient = useQueryClient();
-    
-    const { data: postsResponse, isLoading } = useQuery({
-      queryKey: ['myPosts', userId],
-      queryFn: async () => (await forumAPI.getMyPosts()).data,
-      enabled: !!userId, 
-      staleTime: 5 * 60 * 1000,
-    });
-  
-    const posts: ForumPost[] = postsResponse?.data ?? [];
-  
-    const deletePostMutation = useMutation({
-      mutationFn: (id: string) => forumAPI.deletePost(id),
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['myPosts', userId] });
-        toast.success('Đã xoá bài viết!'); 
-      },
-      onError: (err: any) => toast.error(err.response?.data?.message || 'Lỗi khi xoá bài viết')
-    });
-  
-    const handleDelete = (id: string) => {
-      if (window.confirm('Bạn có chắc chắn muốn xoá bài viết này?')) {
-        deletePostMutation.mutate(id);
-      }
-    };
-  
-    if (isLoading) return <div className="text-center p-8 text-gray-500">Đang tải bài viết...</div>;
-  
-    return (
-      <div className="bg-white p-8 rounded-xl shadow border border-brand-accent/30">
-        
-        {posts.length === 0 ? (
-           <div className="flex flex-col items-center justify-center py-10 text-center">
-              <div className="w-16 h-16 bg-brand-light rounded-full flex items-center justify-center mb-4">
-                  <ChatBubbleBottomCenterTextIcon className="w-8 h-8 text-brand-main" />
-              </div>
-              <h3 className="text-lg font-bold text-brand-dark mb-2">Bài viết của tôi</h3>
-              <p className="text-gray-500 mb-6 max-w-md mx-auto">
-                  Danh sách các bài viết bạn đã đăng trên diễn đàn sẽ sớm được cập nhật tại đây. Hiện tại bạn chưa có bài viết nào.
-              </p>
-              <Link 
-                  to="/forum/new" 
-                  className={`${BUTTON_PRIMARY_CLASS} inline-block`}
-              >
-                  Đăng bài viết mới
-              </Link>
-           </div>
-        ) : (
-          <>
-              <div className="flex justify-between items-center mb-6 border-b border-brand-accent/20 pb-4">
-                  <h2 className="text-xl font-bold text-brand-dark">Bài viết của tôi ({posts.length})</h2>
-                  <Link to="/forum/new" className="btn-sm bg-brand-main text-white px-3 py-1 rounded hover:bg-brand-dark transition-colors">Viết bài mới</Link>
-              </div>
-              <div className="space-y-4">
-              {posts.map(post => (
-                  <div key={post._id} className="border border-brand-accent/30 rounded-lg p-4 hover:bg-brand-light/20 transition-colors flex flex-col sm:flex-row gap-4 group">
-                  {/* Ảnh thumbnail (nếu có) */}
-                  {post.images && post.images.length > 0 ? (
-                      <img 
-                      src={post.images[0]} 
-                      alt="Thumbnail" 
-                      className="w-full sm:w-28 h-24 object-cover rounded-md border border-brand-accent/20 bg-gray-100 flex-shrink-0"
-                      />
-                  ) : (
-                      <div className="w-full sm:w-28 h-24 bg-brand-light/50 rounded-md flex items-center justify-center text-brand-accent flex-shrink-0 border border-brand-accent/20">
-                          <ChatBubbleBottomCenterTextIcon className="w-8 h-8" />
-                      </div>
-                  )}
-                  
-                  <div className="flex-grow min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${
-                          post.status === 'approved' ? 'bg-green-100 text-green-700' :
-                          post.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                          }`}>
-                          {post.status === 'approved' ? 'Đã duyệt' : post.status === 'pending' ? 'Chờ duyệt' : 'Bị từ chối'}
-                          </span>
-                          <span className="text-xs text-gray-400">• {new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
-                      </div>
-                      
-                      <Link to={`/forum/${post._id}`} className="text-lg font-bold text-brand-dark hover:text-brand-main line-clamp-1 mb-1 block" title={post.title}>
-                          {post.title}
-                      </Link>
-                      
-                      <p className="text-gray-600 text-sm line-clamp-2 mb-3">{post.content}</p>
-                      
-                      <div className="flex items-center text-xs text-gray-500 space-x-4">
-                          <span className="flex items-center gap-1"><span className="font-medium">{post.replies?.length || 0}</span> bình luận</span>
-                          <span className="flex items-center gap-1"><span className="font-medium">{post.likes?.length || 0}</span> thích</span>
-                          <span className="bg-brand-light px-2 py-0.5 rounded text-brand-dark capitalize">{post.category}</span>
-                      </div>
-                  </div>
-  
-                  {/* Nút hành động */}
-                  <div className="flex sm:flex-col gap-2 justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity sm:border-l sm:pl-4 sm:border-brand-accent/20 min-w-[80px]">
-                      <Link to={`/forum/edit/${post._id}`} className="btn-sm text-brand-main bg-white border border-brand-accent hover:bg-brand-light flex items-center justify-center gap-1 w-full px-2 py-1 rounded" title="Sửa">
-                          <PencilIcon className="w-4 h-4" /> <span className="sm:hidden">Sửa</span>
-                      </Link>
-                      <button 
-                          onClick={() => handleDelete(post._id)} 
-                          disabled={deletePostMutation.isPending}
-                          className="btn-sm bg-white border border-red-200 text-red-600 hover:bg-red-50 flex items-center justify-center gap-1 w-full px-2 py-1 rounded" 
-                          title="Xoá"
-                      >
-                          <TrashIcon className="w-4 h-4" /> <span className="sm:hidden">Xoá</span>
-                      </button>
-                  </div>
-                  </div>
-              ))}
-              </div>
-          </>
-        )}
-      </div>
-    );
-};
-
-
-// === COMPONENT MỚI: FORM XÁC MINH DANH TÍNH (ĐÃ CẬP NHẬT ĐẦY ĐỦ) ===
-const VerificationTab: React.FC<{ user: User }> = ({ user }) => {
-  const [frontImage, setFrontImage] = useState<File | null>(null);
-  const [backImage, setBackImage] = useState<File | null>(null);
-  const [frontPreview, setFrontPreview] = useState<string | null>(null);
-  const [backPreview, setBackPreview] = useState<string | null>(null);
-  
-  
-  const currentStatus = (user as any).verification?.status || 'unverified';
-  const queryClient = useQueryClient();
-
-
-  const uploadToCloudinary = async (file: File) => {
-    if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) {
-      throw new Error('Chưa cấu hình biến môi trường Cloudinary (VITE_CLOUDINARY_CLOUD_NAME)');
-    }
-    
-    const options = { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true };
-    const compressedFile = await imageCompression(file, options);
-
-    const formData = new FormData();
-    formData.append('file', compressedFile);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-    const res = await axios.post(
-      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`,
-      formData
-    );
-    return res.data.secure_url; // Trả về URL ảnh
-  };
-
-  // Mutation xử lý toàn bộ: Upload 2 ảnh -> Gọi API Backend
-  const submitVerificationMutation = useMutation({
-    mutationFn: async () => {
-      if (!frontImage || !backImage) throw new Error("Vui lòng chọn đủ 2 mặt ảnh.");
-
-      // 1. Upload 2 ảnh song song (Parallel) để tiết kiệm thời gian
-      const [frontUrl, backUrl] = await Promise.all([
-        uploadToCloudinary(frontImage),
-        uploadToCloudinary(backImage)
-      ]);
-
-      // 2. Gọi API Backend để lưu thông tin (sử dụng hàm mới thêm trong api.ts)
-      return authAPI.submitVerification({
-        frontImage: frontUrl,
-        backImage: backUrl,
-        identityType: user.role === 'landlord' ? 'cccd' : 'student_card'
-      });
-    },
-    onSuccess: () => {
-      // SỬA: Thay vì setStatus, ta invalidate query profile để tải lại dữ liệu
-      // Điều này sẽ đảm bảo component Profile cha re-render với trạng thái mới nhất từ Backend (pending)
-      queryClient.invalidateQueries({ queryKey: ['profile', user._id] }); 
-      // Reset form state
-      setFrontImage(null);
-      setBackImage(null);
-    },
-    onError: (error: any) => {
-      console.error("Lỗi xác minh:", error);
-    }
-  });
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'back') => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (type === 'front') {
-        setFrontImage(file);
-        setFrontPreview(URL.createObjectURL(file));
-      } else {
-        setBackImage(file);
-        setBackPreview(URL.createObjectURL(file));
-      }
-    }
-  };
-
-  const handleSubmit = () => {
-    if (!frontImage || !backImage) return toast.error("Vui lòng tải lên đủ 2 mặt giấy tờ.");
-    
-    if (window.confirm("Bạn có chắc chắn thông tin trên giấy tờ là chính xác?")) {
-      // Sử dụng toast.promise để hiển thị trạng thái Loading, Success, Error tự động
-      toast.promise(
-        submitVerificationMutation.mutateAsync(),
-        {
-          loading: 'Đang tải ảnh và gửi hồ sơ...',
-          success: 'Gửi thành công! Quản trị viên sẽ duyệt trong 24h.',
-          error: (err) => `Gửi thất bại: ${err.message || 'Lỗi server'}`
-        }
-      );
-    }
-  };
-
-  // 1. GIAO DIỆN ĐÃ XÁC MINH
-  if (currentStatus === 'verified') {
-    return (
-      <div className="bg-white p-10 rounded-xl shadow border border-brand-accent/30 text-center animate-fadeIn">
-        <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <ShieldCheckIcon className="w-14 h-14 text-green-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-brand-dark mb-2">Tài khoản đã xác minh</h2>
-        <p className="text-gray-600 max-w-md mx-auto">
-          Chúc mừng! Bạn là thành viên uy tín của cộng đồng RelistayDN. Tin đăng của bạn sẽ được ưu tiên hiển thị.
-        </p>
-      </div>
-    );
-  }
-
-  // 2. GIAO DIỆN CHỜ DUYỆT (Ảnh 2)
-  if (currentStatus === 'pending') {
-    return (
-      <div className="bg-white p-10 rounded-xl shadow border border-brand-accent/30 text-center animate-fadeIn">
-        <div className="w-24 h-24 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <ClockIcon className="w-14 h-14 text-yellow-600" />
-        </div>
-        <h2 className="text-2xl font-bold text-brand-dark mb-2">Hồ sơ đang chờ duyệt</h2>
-        <p className="text-gray-600 max-w-md mx-auto">
-          Chúng tôi đang kiểm tra thông tin của bạn. Quá trình này thường mất từ 12-24 giờ làm việc. Vui lòng quay lại sau.
-        </p>
-      </div>
-    );
-  }
+    const queryClient = useQueryClient();
+    const navigate = useNavigate();
   
-  // 3. GIAO DIỆN FORM UPLOAD (CHƯA XÁC MINH HOẶC BỊ TỪ CHỐI)
-  const isRejected = currentStatus === 'rejected';
-  return (
-    <div className="bg-white rounded-xl shadow border border-brand-accent/30 overflow-hidden">
-      <div className="p-6 border-b border-brand-accent/20 bg-brand-light/20">
-        <h2 className="text-xl font-bold text-brand-dark flex items-center gap-2">
-            <ShieldCheckIcon className="w-6 h-6 text-brand-main" />
-            Xác minh danh tính
-        </h2>
-        <p className="text-sm text-gray-600 mt-1">
-          Để đảm bảo an toàn cho cộng đồng, vui lòng cung cấp hình ảnh 
-          <span className="font-bold text-brand-dark"> {user.role === 'landlord' ? 'Căn cước công dân (CCCD)' : 'Thẻ sinh viên'} </span> 
-          chính chủ.
-        </p>
-      </div>
-      
-      <div className="p-6 md:p-8">
-          {/* THÊM THÔNG BÁO BỊ TỪ CHỐI */}
-          {isRejected && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8 flex gap-4 items-start">
-              <div className="bg-red-100 p-2 rounded-full">
-                <XMarkIcon className="w-5 h-5 text-red-600" />
-              </div>
-              <div className="text-sm text-red-800">
-                <p className="font-bold mb-1">Hồ sơ xác minh bị từ chối</p>
-                <p>Lý do: {(user as any).verification?.message || 'Không rõ.'} Vui lòng kiểm tra và gửi lại.</p>
-              </div>
-            </div>
-          )}
-          
-        <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 mb-8 flex gap-4 items-start">
-           <div className="bg-blue-100 p-2 rounded-full">
-                <KeyIcon className="w-5 h-5 text-blue-600" />
-           </div>
-           <div className="text-sm text-blue-800">
-              <p className="font-bold mb-1">Cam kết bảo mật thông tin</p>
-              <p>Hình ảnh giấy tờ của bạn được mã hóa và chỉ sử dụng duy nhất cho mục đích xác thực tài khoản. Chúng tôi cam kết không chia sẻ với bên thứ ba.</p>
-           </div>
-        </div>
+    const { data: roomsResponse, isLoading } = useQuery({
+      queryKey: ['myRooms', userId],
+      queryFn: async () => (await roomAPI.getMyRooms()).data,
+      staleTime: 5 * 60 * 1000,
+    });
+  
+    const rooms: Room[] = roomsResponse?.data ?? [];
+  
+    const deleteRoomMutation = useMutation({
+      mutationFn: (roomId: string) => roomAPI.deleteRoom(roomId),
+      onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['myRooms', userId] }); toast.success('Đã xoá phòng!'); },
+      onError: () => toast.error('Xoá thất bại.')
+    });
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-          {/* Mặt trước */}
-          <div>
-            <label className="block text-sm font-bold text-brand-dark mb-3">Mặt trước {user.role === 'landlord' ? 'CCCD' : 'Thẻ SV'}</label>
-            <div 
-              className="relative w-full h-56 border-2 border-dashed border-brand-accent/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-brand-light/30 transition-all bg-gray-50 overflow-hidden group"
-              onClick={() => document.getElementById('front-upload')?.click()}
-            >
-              {frontPreview ? (
-                <>
-                    <img src={frontPreview} alt="Front" className="w-full h-full object-contain" />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-white font-medium flex items-center gap-2"><CameraIcon className="w-5 h-5"/> Thay đổi</span>
-                    </div>
-                </>
-              ) : (
-                <div className="text-center p-4">
-                  <div className="w-12 h-12 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-3 text-brand-main">
-                    <DocumentArrowUpIcon className="w-6 h-6" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-700">Tải ảnh mặt trước</p>
-                  <p className="text-xs text-gray-500 mt-1">JPG, PNG, tối đa 5MB</p>
-                </div>
-              )}
-              <input id="front-upload" type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, 'front')} />
-            </div>
-          </div>
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ id, isAvailable }: { id: string, isAvailable: boolean }) => roomAPI.updateRoom(id, { isAvailable }),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['myRooms', userId] }); toast.success('Đã cập nhật trạng thái'); }
+    });
+  
+    if (isLoading) return <div className="flex justify-center p-10"><div className="animate-spin w-8 h-8 border-2 border-brand-main border-t-transparent rounded-full"></div></div>;
+  
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xl font-bold text-brand-dark">Danh sách phòng ({rooms.length})</h3>
+          <Link to="/landlord/dang-tin" className={BUTTON_PRIMARY}>+ Đăng tin mới</Link>
+        </div>
 
-          {/* Mặt sau */}
-          <div>
-            <label className="block text-sm font-bold text-brand-dark mb-3">Mặt sau {user.role === 'landlord' ? 'CCCD' : 'Thẻ SV'}</label>
-            <div 
-              className="relative w-full h-56 border-2 border-dashed border-brand-accent/50 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:bg-brand-light/30 transition-all bg-gray-50 overflow-hidden group"
-              onClick={() => document.getElementById('back-upload')?.click()}
-            >
-              {backPreview ? (
-                <>
-                    <img src={backPreview} alt="Back" className="w-full h-full object-contain" />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-white font-medium flex items-center gap-2"><CameraIcon className="w-5 h-5"/> Thay đổi</span>
-                    </div>
-                </>
-              ) : (
-                <div className="text-center p-4">
-                  <div className="w-12 h-12 bg-brand-light rounded-full flex items-center justify-center mx-auto mb-3 text-brand-main">
-                    <DocumentArrowUpIcon className="w-6 h-6" />
-                  </div>
-                  <p className="text-sm font-medium text-gray-700">Tải ảnh mặt sau</p>
-                  <p className="text-xs text-gray-500 mt-1">JPG, PNG, tối đa 5MB</p>
-                </div>
-              )}
-              <input id="back-upload" type="file" className="hidden" accept="image/*" onChange={(e) => handleFileChange(e, 'back')} />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex justify-end pt-4 border-t border-brand-accent/10">
-          <button 
-            onClick={handleSubmit} 
-            disabled={submitVerificationMutation.isPending || !frontImage || !backImage}
-            className={`${BUTTON_PRIMARY_CLASS} px-8 py-3 text-lg shadow-md disabled:opacity-70 disabled:cursor-not-allowed`}
-          >
-            {submitVerificationMutation.isPending ? <ArrowPathIcon className="w-5 h-5 animate-spin" /> : <ShieldCheckIcon className="w-5 h-5" />}
-            {submitVerificationMutation.isPending ? 'Đang gửi hồ sơ...' : 'Gửi hồ sơ xác minh'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+        {rooms.length === 0 ? (
+          <div className="text-center py-16 bg-brand-light/10 rounded-3xl border border-dashed border-brand-light/40">
+             <HomeModernIcon className="w-16 h-16 text-brand-light mx-auto mb-4" />
+             <p className="text-gray-500">Bạn chưa đăng tin phòng trọ nào.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4">
+            {rooms.map((room) => (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={room._id} className="bg-white p-4 rounded-2xl shadow-sm border border-brand-light/20 flex gap-4 hover:shadow-lg hover:shadow-brand-main/5 transition-all">
+                <img src={room.images?.[0]} alt="" className="w-32 h-24 object-cover rounded-xl bg-gray-200" />
+                <div className="flex-grow min-w-0 py-1 flex flex-col justify-between">
+                    <div>
+                        <div className="flex justify-between items-start">
+                            <Link to={`/room/${room._id}`} className="font-bold text-brand-dark text-lg hover:text-brand-main truncate pr-4 block">{room.title}</Link>
+                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${room.status === 'approved' ? 'bg-green-100 text-green-700' : room.status === 'pending' ? 'bg-brand-soft/50 text-brand-dark' : 'bg-red-100 text-red-700'}`}>
+                                {room.status === 'approved' ? 'Đã duyệt' : room.status === 'pending' ? 'Chờ duyệt' : 'Bị từ chối'}
+                            </span>
+                        </div>
+                        <p className="text-sm text-gray-500 truncate">{room.address}, {room.district}</p>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                        <span className="font-bold text-brand-accent">{(room.price || 0).toLocaleString()}đ</span>
+                        <div className="flex gap-2">
+                            <button onClick={() => navigate(`/landlord/edit-room/${room._id}`)} className="p-2 text-gray-500 hover:text-brand-main hover:bg-brand-light/20 rounded-lg"><PencilIcon className="w-4 h-4"/></button>
+                            <button onClick={() => updateStatusMutation.mutate({id: room._id, isAvailable: !room.isAvailable})} className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${room.isAvailable ? 'border-green-200 text-green-700 bg-green-50' : 'border-gray-200 text-gray-500 bg-gray-50'}`}>
+                                {room.isAvailable ? 'Còn trống' : 'Đã thuê'}
+                            </button>
+                            <button onClick={() => { if(confirm('Xoá phòng này?')) deleteRoomMutation.mutate(room._id) }} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><TrashIcon className="w-4 h-4"/></button>
+                        </div>
+                    </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
 };
 
+// === COMPONENT CON: BÀI VIẾT CỦA TÔI ===
+const MyPostsList: React.FC<{ userId: string }> = ({ userId }) => {
+    const queryClient = useQueryClient();
+    const { data: postsResponse, isLoading } = useQuery({
+      queryKey: ['myPosts', userId],
+      queryFn: async () => (await forumAPI.getMyPosts()).data,
+      staleTime: 5 * 60 * 1000,
+    });
+    const posts: ForumPost[] = postsResponse?.data ?? [];
+    
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => forumAPI.deletePost(id),
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['myPosts', userId] }); toast.success('Đã xoá bài viết'); }
+    });
 
-// === PAGE: PROFILE (MAIN) ===
+    if (isLoading) return <div className="flex justify-center p-10"><div className="animate-spin w-8 h-8 border-2 border-brand-main border-t-transparent rounded-full"></div></div>;
+
+    return (
+        <div className="space-y-6">
+            <div className="flex justify-between items-center">
+                <h3 className="text-xl font-bold text-brand-dark">Bài viết ({posts.length})</h3>
+                <Link to="/forum/new" className={BUTTON_PRIMARY}>Viết bài mới</Link>
+            </div>
+            {posts.length === 0 ? (
+                <div className="text-center py-16 bg-brand-light/10 rounded-3xl border border-dashed border-brand-light/40">
+                    <ChatBubbleBottomCenterTextIcon className="w-16 h-16 text-brand-light mx-auto mb-4" />
+                    <p className="text-gray-500">Bạn chưa có bài thảo luận nào.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-4">
+                    {posts.map(post => (
+                        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} key={post._id} className="bg-white p-5 rounded-2xl shadow-sm border border-brand-light/20 hover:shadow-lg hover:shadow-brand-main/5 transition-all group">
+                            <div className="flex justify-between items-start mb-2">
+                                <Link to={`/forum/${post._id}`} className="font-bold text-brand-dark text-lg hover:text-brand-main line-clamp-1">{post.title}</Link>
+                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Link to={`/forum/edit/${post._id}`} className="p-1.5 text-gray-400 hover:text-brand-main bg-gray-50 rounded-md"><PencilIcon className="w-4 h-4"/></Link>
+                                    <button onClick={() => { if(confirm('Xoá bài?')) deleteMutation.mutate(post._id) }} className="p-1.5 text-red-400 hover:text-red-600 bg-red-50 rounded-md"><TrashIcon className="w-4 h-4"/></button>
+                                </div>
+                            </div>
+                            <p className="text-gray-600 text-sm line-clamp-2 mb-3">{post.content}</p>
+                            <div className="flex items-center gap-4 text-xs text-gray-400 font-medium">
+                                <span className={`px-2 py-0.5 rounded-full ${post.status === 'approved' ? 'bg-green-50 text-green-600' : 'bg-brand-soft/30 text-brand-dark'}`}>
+                                    {post.status === 'approved' ? 'Đã duyệt' : 'Chờ duyệt'}
+                                </span>
+                                <span>{new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
+                                <span>{post.replies?.length || 0} bình luận</span>
+                            </div>
+                        </motion.div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+// === COMPONENT CON: XÁC MINH ===
+const VerificationTab: React.FC<{ user: User }> = ({ user }) => {
+    const [frontImage, setFrontImage] = useState<File | null>(null);
+    const [backImage, setBackImage] = useState<File | null>(null);
+    const [frontPreview, setFrontPreview] = useState<string | null>(null);
+    const [backPreview, setBackPreview] = useState<string | null>(null);
+    const currentStatus = (user as any).verification?.status || 'unverified';
+    const queryClient = useQueryClient();
+
+    const uploadToCloudinary = async (file: File) => {
+        if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) throw new Error('Missing Env');
+        const compressedFile = await imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true });
+        const formData = new FormData();
+        formData.append('file', compressedFile);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        const res = await axios.post(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, formData);
+        return res.data.secure_url;
+    };
+
+    const submitMutation = useMutation({
+        mutationFn: async () => {
+            if (!frontImage || !backImage) throw new Error("Thiếu ảnh.");
+            const [frontUrl, backUrl] = await Promise.all([uploadToCloudinary(frontImage), uploadToCloudinary(backImage)]);
+            return authAPI.submitVerification({ frontImage: frontUrl, backImage: backUrl, identityType: user.role === 'landlord' ? 'cccd' : 'student_card' });
+        },
+        onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['profile', user._id] }); setFrontImage(null); setBackImage(null); },
+        onError: (err) => console.error(err)
+    });
+
+    const handleFile = (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'back') => {
+        const file = e.target.files?.[0];
+        if (file) {
+            if (type === 'front') { setFrontImage(file); setFrontPreview(URL.createObjectURL(file)); }
+            else { setBackImage(file); setBackPreview(URL.createObjectURL(file)); }
+        }
+    };
+
+    const handleSubmit = () => {
+        if (!frontImage || !backImage) return toast.error("Vui lòng chọn đủ 2 ảnh");
+        if(confirm("Xác nhận thông tin chính xác?")) {
+            toast.promise(submitMutation.mutateAsync(), { loading: 'Đang gửi...', success: 'Gửi thành công!', error: 'Gửi thất bại' });
+        }
+    }
+
+    if (currentStatus === 'verified') return (
+        <div className="text-center py-12">
+            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce-slow"><ShieldCheckIcon className="w-10 h-10 text-green-600" /></div>
+            <h3 className="text-2xl font-bold text-gray-800">Tài khoản đã xác minh</h3>
+            <p className="text-gray-500 mt-2">Bạn là thành viên uy tín của RelistayDN.</p>
+        </div>
+    );
+
+    if (currentStatus === 'pending') return (
+        <div className="text-center py-12">
+            <div className="w-20 h-20 bg-brand-soft/20 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse"><ClockIcon className="w-10 h-10 text-brand-accent" /></div>
+            <h3 className="text-2xl font-bold text-brand-dark">Đang chờ duyệt</h3>
+            <p className="text-gray-500 mt-2">Hồ sơ của bạn đang được kiểm tra (12-24h).</p>
+        </div>
+    );
+
+    return (
+        <div className="space-y-8">
+            <div className="bg-brand-light/10 border border-brand-light/30 rounded-2xl p-5 flex gap-4">
+                <ShieldCheckIcon className="w-8 h-8 text-brand-main flex-shrink-0" />
+                <div>
+                    <h4 className="font-bold text-brand-main">Xác minh danh tính</h4>
+                    <p className="text-sm text-brand-dark/70 mt-1">Vui lòng tải lên ảnh 2 mặt của {user.role === 'landlord' ? 'CCCD' : 'Thẻ Sinh Viên'} để mở khóa các tính năng cao cấp.</p>
+                </div>
+            </div>
+
+            {currentStatus === 'rejected' && (
+                <div className="bg-red-50 border border-red-100 rounded-2xl p-4 text-red-700 text-sm font-medium">
+                    ❌ Hồ sơ bị từ chối: {(user as any).verification?.message || 'Thông tin không hợp lệ'}.
+                </div>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {[
+                    { type: 'front', label: 'Mặt trước', preview: frontPreview, setter: 'front-upload' },
+                    { type: 'back', label: 'Mặt sau', preview: backPreview, setter: 'back-upload' }
+                ].map((item: any) => (
+                    <div key={item.type} onClick={() => document.getElementById(item.setter)?.click()} 
+                        className="relative h-64 border-2 border-dashed border-gray-300 rounded-3xl bg-gray-50 hover:bg-white hover:border-brand-main transition-all flex flex-col items-center justify-center cursor-pointer overflow-hidden group">
+                        {item.preview ? (
+                            <>
+                                <img src={item.preview} className="w-full h-full object-contain" alt="" />
+                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <span className="text-white font-bold flex gap-2"><CameraIcon className="w-5 h-5"/> Đổi ảnh</span>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="text-center text-gray-400 group-hover:text-brand-main">
+                                <DocumentArrowUpIcon className="w-12 h-12 mx-auto mb-2" />
+                                <p className="font-medium">{item.label}</p>
+                            </div>
+                        )}
+                        <input id={item.setter} type="file" hidden accept="image/*" onChange={(e) => handleFile(e, item.type)} />
+                    </div>
+                ))}
+            </div>
+
+            <div className="flex justify-end">
+                <button onClick={handleSubmit} disabled={submitMutation.isPending} className={BUTTON_PRIMARY}>
+                    {submitMutation.isPending ? 'Đang gửi...' : 'Gửi hồ sơ xác minh'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+// === COMPONENT: ĐỔI MẬT KHẨU ===
+const ChangePasswordForm = () => {
+    const [data, setData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    const changePass = useMutation({
+        mutationFn: authAPI.changePassword,
+        onSuccess: () => { toast.success('Đổi mật khẩu thành công!'); setData({currentPassword:'', newPassword:'', confirmPassword:''}); },
+        onError: (err: any) => toast.error(err.response?.data?.message || 'Lỗi')
+    });
+
+    return (
+        <form onSubmit={(e) => { e.preventDefault(); if(data.newPassword !== data.confirmPassword) return toast.error('Mật khẩu không khớp'); changePass.mutate(data); }} className="space-y-5 max-w-lg">
+            <div><label className="font-bold text-gray-700 text-sm mb-1 block">Mật khẩu hiện tại</label><input type="password" value={data.currentPassword} onChange={e => setData({...data, currentPassword: e.target.value})} className={INPUT_CLASS} required /></div>
+            <div><label className="font-bold text-gray-700 text-sm mb-1 block">Mật khẩu mới</label><input type="password" value={data.newPassword} onChange={e => setData({...data, newPassword: e.target.value})} className={INPUT_CLASS} required /></div>
+            <div><label className="font-bold text-gray-700 text-sm mb-1 block">Xác nhận mật khẩu</label><input type="password" value={data.confirmPassword} onChange={e => setData({...data, confirmPassword: e.target.value})} className={INPUT_CLASS} required /></div>
+            <button type="submit" disabled={changePass.isPending} className={BUTTON_PRIMARY}>{changePass.isPending ? 'Đang xử lý...' : 'Cập nhật mật khẩu'}</button>
+        </form>
+    );
+};
+
+// === MAIN PAGE ===
 const Profile: React.FC = () => {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  // Fetch Profile Data
-  const { data: profileResponse, isLoading: isLoadingProfile } = useQuery({
-    queryKey: ['profile', user?._id],
-    queryFn: async () => {
-        if (!user?._id) throw new Error("User ID is missing");
-        const response = await authAPI.getProfile();
-        return response.data;
-    },
-    enabled: !!user?._id,
-    staleTime: 5 * 60 * 1000,
-  });
+  const { data: profileResponse, isLoading } = useQuery({
+    queryKey: ['profile', user?._id],
+    queryFn: async () => { if (!user?._id) return null; const res = await authAPI.getProfile(); return res.data; },
+    enabled: !!user?._id,
+  });
 
-  // SỬA LỖI: Cập nhật biến profile chính để nó chứa dữ liệu mới nhất từ query
-  const profile: User | null = profileResponse?.data || user || null;
-  const displayProfile = profile || user;
+  const displayProfile = profileResponse?.data || user;
+  const [activeTab, setActiveTab] = useState<ActiveTab>('profile');
+  const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({ name: '', phone: '' });
+  
+  // Avatar
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>('profile');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editFormData, setEditFormData] = useState<Partial<User>>({ name: '', phone: '' });
-  
-  // Avatar States
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
+  useEffect(() => { if (displayProfile) setFormData({ name: displayProfile.name, phone: displayProfile.phone || '' }); }, [displayProfile]);
+  if (!user) return null;
 
-  useEffect(() => {
-    if (profile && !isEditing) {
-      setEditFormData({ name: profile.name, phone: profile.phone });
-    }
-  }, [profile, isEditing]);
+  const updateProfile = useMutation({
+      mutationFn: authAPI.updateProfile,
+      onSuccess: (res) => { queryClient.setQueryData(['profile', user._id], (old: any) => ({...old, data: res.data.data})); setIsEditing(false); toast.success('Đã lưu!'); },
+      onError: () => toast.error('Lỗi cập nhật')
+  });
 
-  useEffect(() => {
-    if (!isLoadingProfile && !profile && !user) navigate('/login');
-  }, [isLoadingProfile, profile, user, navigate]);
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      setAvatarUploading(true);
+      try {
+          const compressed = await imageCompression(file, { maxSizeMB: 1, useWebWorker: true });
+          const form = new FormData(); form.append('file', compressed); form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET!);
+          const res = await axios.post(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, form);
+          updateProfile.mutate({ avatar: res.data.secure_url });
+      } catch { toast.error('Lỗi upload ảnh'); } finally { setAvatarUploading(false); }
+  };
 
-  const updateProfileMutation = useMutation({
-    mutationFn: (updatedData: Partial<User>) => authAPI.updateProfile(updatedData),
-    onSuccess: (response) => {
-        const updatedUser = response.data.data;
-        queryClient.setQueryData(['profile', user?._id], (old: any) => old ? {...old, data: updatedUser} : undefined);
-        setIsEditing(false);
-        toast.success('Cập nhật thông tin thành công!');
-    },
-    onError: (error: any) => toast.error(error.response?.data?.message || 'Cập nhật thất bại.')
-  });
+  const MENU_ITEMS = [
+      { id: 'profile', label: 'Thông tin cá nhân', icon: UserIcon },
+      { id: 'verification', label: 'Xác minh tài khoản', icon: ShieldCheckIcon },
+      ...(user.role === 'landlord' ? [{ id: 'my-rooms', label: 'Quản lý tin đăng', icon: HomeModernIcon }] : []),
+      { id: 'my-posts', label: 'Bài viết của tôi', icon: ChatBubbleBottomCenterTextIcon },
+      { id: 'password', label: 'Đổi mật khẩu', icon: KeyIcon },
+  ];
 
-  const { mutate: uploadAvatar } = useMutation({
-    mutationFn: async (file: File) => {
-      setIsUploading(true);
-      if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_UPLOAD_PRESET) throw new Error('Lỗi cấu hình Cloudinary');
-      const options = { maxSizeMB: 1, maxWidthOrHeight: 1024, useWebWorker: true };
-      const compressedFile = await imageCompression(file, options);
-      const formData = new FormData();
-      formData.append('file', compressedFile);
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-      const res = await axios.post(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, formData);
-      return authAPI.updateProfile({ avatar: res.data.secure_url });
-    },
-    onSuccess: (res) => {
-      toast.success('Đổi ảnh đại diện thành công!');
-      queryClient.setQueryData(['profile', user?._id], (old: any) => old ? {...old, data: res.data.data} : undefined);
-      handleCancelAvatar();
-    },
-    onError: (err: any) => toast.error('Lỗi upload: ' + err.message),
-    onSettled: () => setIsUploading(false)
-  });
+  return (
+    <div className={PAGE_WRAPPER}>
+      <Toaster position="top-right" />
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+        
+        {/* SIDEBAR */}
+        <aside className="lg:col-span-4 space-y-6">
+            <div className={`${GLASS_CARD} p-8 flex flex-col items-center text-center relative`}>
+                <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                    <div className="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-brand-main to-brand-light shadow-lg mb-4">
+                        <img src={displayProfile?.avatar || `https://ui-avatars.com/api/?name=${displayProfile?.name}`} className="w-full h-full rounded-full object-cover border-4 border-white bg-white" alt="" />
+                    </div>
+                    <div className="absolute bottom-4 right-0 bg-white p-2 rounded-full shadow-md text-brand-main group-hover:scale-110 transition-transform">
+                        {avatarUploading ? <ArrowPathIcon className="w-5 h-5 animate-spin"/> : <CameraIcon className="w-5 h-5" />}
+                    </div>
+                    <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={handleAvatarChange} />
+                </div>
+                
+                <h2 className="text-2xl font-extrabold text-brand-main mb-1">{displayProfile?.name}</h2>
+                <p className="text-gray-500 mb-4 font-medium">{displayProfile?.email}</p>
+                <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider ${displayProfile?.role === 'landlord' ? 'bg-purple-100 text-purple-700' : 'bg-brand-soft/30 text-brand-dark'}`}>
+                    {displayProfile?.role === 'landlord' ? 'Chủ nhà' : 'Sinh viên'}
+                </span>
+            </div>
 
-  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) { setAvatarFile(file); setAvatarPreview(URL.createObjectURL(file)); }
-    e.target.value = '';
-  };
-  const handleCancelAvatar = () => { if (avatarPreview) URL.revokeObjectURL(avatarPreview); setAvatarFile(null); setAvatarPreview(null); };
+            <div className={`${GLASS_CARD} p-4`}>
+                <nav className="space-y-2">
+                    {MENU_ITEMS.map((item) => (
+                        <button
+                            key={item.id}
+                            onClick={() => setActiveTab(item.id as ActiveTab)}
+                            className={`w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all font-bold text-sm ${
+                                activeTab === item.id 
+                                ? 'bg-brand-main text-white shadow-lg shadow-brand-main/30' 
+                                : 'text-gray-600 hover:bg-brand-light/10 hover:text-brand-main'
+                            }`}
+                        >
+                            <item.icon className={`w-5 h-5 ${activeTab === item.id ? 'text-white' : 'text-gray-400'}`} />
+                            {item.label}
+                        </button>
+                    ))}
+                    <div className="h-px bg-gray-100 my-2 mx-4"></div>
+                </nav>
+            </div>
+        </aside>
 
-  // --- COMPONENT CON: FORM ĐỔI MẬT KHẨU ---
-  const ChangePasswordForm = () => {
-    const [passData, setPassData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
-    const [error, setError] = useState('');
-    const changePassMutation = useMutation({
-      mutationFn: (data: any) => authAPI.changePassword(data),
-      onSuccess: () => { toast.success('Đổi mật khẩu thành công! Vui lòng đăng nhập lại.'); setPassData({ currentPassword: '', newPassword: '', confirmPassword: '' }); },
-      onError: (err: any) => { toast.error(err.response?.data?.message || 'Đổi mật khẩu thất bại'); }
-    });
-    const handleSubmit = (e: React.FormEvent) => {
-      e.preventDefault(); setError('');
-      if (passData.newPassword !== passData.confirmPassword) return toast.error('Mật khẩu xác nhận không khớp!');
-      if (passData.newPassword.length < 6) return toast.error('Mật khẩu mới phải có ít nhất 6 ký tự');
-      changePassMutation.mutate({ currentPassword: passData.currentPassword, newPassword: passData.newPassword });
-    };
-    return (
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {error && <div className="p-3 bg-red-50 text-red-600 text-sm rounded-md border border-red-200">{error}</div>}
-        <div><label className="block text-sm font-medium text-brand-dark mb-1">Mật khẩu hiện tại</label><input type="password" required className={INPUT_CLASS} value={passData.currentPassword} onChange={(e) => setPassData({ ...passData, currentPassword: e.target.value })} /></div>
-        <div><label className="block text-sm font-medium text-brand-dark mb-1">Mật khẩu mới</label><input type="password" required className={INPUT_CLASS} value={passData.newPassword} onChange={(e) => setPassData({ ...passData, newPassword: e.target.value })} /></div>
-        <div><label className="block text-sm font-medium text-brand-dark mb-1">Xác nhận mật khẩu mới</label><input type="password" required className={INPUT_CLASS} value={passData.confirmPassword} onChange={(e) => setPassData({ ...passData, confirmPassword: e.target.value })} /></div>
-        <div className="pt-2"><button type="submit" disabled={changePassMutation.isPending} className={BUTTON_PRIMARY_CLASS + " w-full sm:w-auto"}>{changePassMutation.isPending ? 'Đang xử lý...' : 'Lưu mật khẩu'}</button></div>
-      </form>
-    );
-  };
+        {/* MAIN CONTENT */}
+        <main className={`lg:col-span-8 ${GLASS_CARD} min-h-[600px] flex flex-col`}>
+            {/* Header */}
+            <div className="p-8 border-b border-gray-100 bg-white/40 flex items-center justify-between">
+                <h2 className="text-2xl font-black text-brand-main">
+                    {MENU_ITEMS.find(i => i.id === activeTab)?.label}
+                </h2>
+                {activeTab === 'profile' && !isEditing && (
+                    <button 
+                        onClick={() => setIsEditing(true)} 
+                        className="flex items-center gap-2 text-sm font-bold text-brand-main hover:bg-brand-light/20 px-4 py-2 rounded-xl transition-all group"
+                    >
+                        <PencilIcon className="w-4 h-4 group-hover:scale-110 transition-transform" />
+                        <span className="hidden sm:inline">Chỉnh sửa</span>
+                    </button>
+                )}
+            </div>
+            
+            <div className="p-8 flex-grow">
+                <AnimatePresence mode="wait">
+                    <motion.div 
+                        key={activeTab}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.2 }}
+                    >
+                        {activeTab === 'profile' && (
+                            <div className="max-w-2xl">
+                                {isEditing ? (
+                                    <form onSubmit={(e) => { e.preventDefault(); updateProfile.mutate(formData); }} className="space-y-6">
+                                        <div><label className="font-bold text-gray-700 block mb-2">Họ và tên</label><input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className={INPUT_CLASS} /></div>
+                                        <div><label className="font-bold text-gray-700 block mb-2">Số điện thoại</label><input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className={INPUT_CLASS} /></div>
+                                        <div className="flex gap-4 pt-4">
+                                            <button type="submit" disabled={updateProfile.isPending} className={BUTTON_PRIMARY}>Lưu thay đổi</button>
+                                            <button type="button" onClick={() => setIsEditing(false)} className={BUTTON_SECONDARY}>Hủy bỏ</button>
+                                        </div>
+                                    </form>
+                                ) : (
+                                    <div className="space-y-6">
+                                        <div className="group">
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block ml-1">Họ tên</label>
+                                            <div className="p-4 bg-gray-50 rounded-2xl text-brand-dark font-medium text-lg shadow-sm ring-1 ring-black/5 transition-all group-hover:bg-white group-hover:shadow-md group-hover:ring-brand-main/20">
+                                                {displayProfile?.name}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="group">
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block ml-1">Email</label>
+                                            <div className="p-4 bg-gray-50 rounded-2xl text-brand-dark font-medium text-lg shadow-sm ring-1 ring-black/5 transition-all group-hover:bg-white group-hover:shadow-md group-hover:ring-brand-main/20">
+                                                {displayProfile?.email}
+                                            </div>
+                                        </div>
+                                        
+                                        <div className="group">
+                                            <label className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 block ml-1">Số điện thoại</label>
+                                            <div className="p-4 bg-gray-50 rounded-2xl text-brand-dark font-medium text-lg shadow-sm ring-1 ring-black/5 transition-all group-hover:bg-white group-hover:shadow-md group-hover:ring-brand-main/20">
+                                                {displayProfile?.phone || <span className="text-gray-400 italic font-normal">Chưa cập nhật</span>}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
-  // --- GIAO DIỆN CHÍNH ---
-  if (!user && isLoadingProfile) return <div className="p-10 text-center text-brand-dark">Đang tải...</div>;
-  if (!user && !profile) return null;
-
-  return (
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 bg-brand-light min-h-[calc(100vh-64px)]">
-      {/* 2. Đặt Toaster tại đây để hiển thị thông báo */}
-      <Toaster position="top-right" reverseOrder={false} />
-
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-        
-        {/* SIDEBAR */}
-        <aside className="md:col-span-3 space-y-6">
-            <div className="bg-white rounded-xl shadow-md border border-brand-accent/30 p-6 flex flex-col items-center text-center">
-                <div className="relative w-28 h-28 mb-4 group">
-                    <img src={avatarPreview || displayProfile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(displayProfile?.name || 'U')}&background=0ea5e9&color=fff`} alt="Avatar" className="w-28 h-28 rounded-full object-cover border-4 border-white shadow-md" />
-                    <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleAvatarFileChange} />
-                    {!avatarPreview && (
-                        <button onClick={() => fileInputRef.current?.click()} className="absolute bottom-0 right-0 bg-white p-2 rounded-full shadow border border-brand-accent hover:bg-gray-100 text-brand-dark"><CameraIcon className="w-5 h-5" /></button>
-                    )}
-                </div>
-                {avatarPreview && (
-                    <div className="flex gap-2 mb-3 justify-center">
-                        <button onClick={() => avatarFile && uploadAvatar(avatarFile)} className="btn-sm bg-brand-main text-white px-3 py-1 rounded flex gap-1 items-center" disabled={isUploading}>{isUploading ? <ArrowPathIcon className="w-4 h-4 animate-spin" /> : <CheckIcon className="w-4 h-4" />} Lưu</button>
-                        <button onClick={handleCancelAvatar} className="btn-sm bg-white text-red-600 border border-red-200 px-3 py-1 rounded flex gap-1 items-center" disabled={isUploading}><XMarkIcon className="w-4 h-4" /> Huỷ</button>
-                    </div>
-                )}
-                <h2 className="text-xl font-bold text-brand-dark truncate w-full flex items-center justify-center gap-1">
-                  {displayProfile?.name}
-                </h2>
-                <p className="text-sm text-gray-500 truncate w-full mb-3">{displayProfile?.email}</p>
-                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-brand-main/10 text-brand-main capitalize">{displayProfile?.role === 'landlord' ? 'Chủ trọ' : 'Sinh viên'}</span>
-            </div>
-
-            <div className="bg-white rounded-xl shadow-md border border-brand-accent/30 overflow-hidden">
-                <nav className="flex flex-col">
-                    {[
-                        { id: 'profile', name: 'Thông tin cá nhân', icon: UserIcon },
-                        { id: 'verification', name: 'Xác minh tài khoản', icon: ShieldCheckIcon },
-                        ...(displayProfile?.role === 'landlord' ? [{ id: 'my-rooms', name: 'Quản lý tin đăng', icon: HomeModernIcon }] : []),
-                        { id: 'my-posts', name: 'Bài viết của tôi', icon: ChatBubbleBottomCenterTextIcon },
-                        { id: 'password', name: 'Đổi mật khẩu', icon: KeyIcon },
-                    ].map(tab => (
-                        <button 
-                            key={tab.id} 
-                            onClick={() => setActiveTab(tab.id as ActiveTab)} 
-                            className={`flex items-center gap-3 p-4 text-sm font-medium transition-all border-l-4 ${
-                                activeTab === tab.id 
-                                ? 'bg-brand-main/5 text-brand-dark border-brand-main' 
-                                : 'text-gray-600 hover:bg-brand-light/50 border-transparent hover:text-brand-main'
-                            }`}
-                        >
-                            <tab.icon className={`w-5 h-5 ${activeTab === tab.id ? 'text-brand-main' : 'text-brand-accent'}`} /> 
-                            <span>{tab.name}</span>
-                        </button>
-                    ))}
-                </nav>
-            </div>
-        </aside>
-
-        {/* CONTENT */}
-        <main className="md:col-span-9">
-          {activeTab === 'profile' && (
-             <div className="bg-white rounded-xl shadow-sm border border-brand-accent/30 overflow-hidden">
-                <div className="flex items-center justify-between p-6 border-b border-brand-accent/20">
-                    <h2 className="text-lg font-bold text-brand-dark">Thông tin chi tiết</h2>
-                    {!isEditing && <button onClick={() => setIsEditing(true)} className="text-sm text-brand-main hover:underline font-medium">Chỉnh sửa</button>}
-                </div>
-                <div className="p-6 md:p-8">
-                    {isEditing ? (
-                        <form onSubmit={(e) => { e.preventDefault(); updateProfileMutation.mutate(editFormData); }} className="space-y-6 max-w-xl">
-                            <div><label className="block text-sm font-medium text-brand-dark mb-1">Họ và tên</label><input type="text" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} className={INPUT_CLASS} required /></div>
-                            <div><label className="block text-sm font-medium text-brand-dark mb-1">SĐT</label><input type="tel" value={editFormData.phone} onChange={e => setEditFormData({...editFormData, phone: e.target.value})} className={INPUT_CLASS} required /></div>
-                            <div className="flex gap-3 pt-4"><button type="submit" className={BUTTON_PRIMARY_CLASS} disabled={updateProfileMutation.isPending}>{updateProfileMutation.isPending ? 'Lưu...' : 'Lưu thay đổi'}</button><button type="button" onClick={() => setIsEditing(false)} className={BUTTON_SECONDARY_CLASS}>Hủy</button></div>
-                        </form>
-                    ) : (
-                        <div className="space-y-6">
-                            <div className="grid grid-cols-3 gap-4 py-3 border-b border-brand-accent/10"><span className="text-gray-500 font-medium">Họ tên</span><span className="col-span-2 font-medium text-brand-dark">{displayProfile?.name}</span></div>
-                            <div className="grid grid-cols-3 gap-4 py-3 border-b border-brand-accent/10"><span className="text-gray-500 font-medium">Email</span><span className="col-span-2 text-brand-dark">{displayProfile?.email}</span></div>
-                            <div className="grid grid-cols-3 gap-4 py-3 border-b border-brand-accent/10"><span className="text-gray-500 font-medium">SĐT</span><span className="col-span-2 text-brand-dark">{displayProfile?.phone || '---'}</span></div>
-                        </div>
-                    )}
-                </div>
-             </div>
-          )}
-
-          {/* === TAB XÁC MINH MỚI === */}
-          {activeTab === 'verification' && displayProfile && <VerificationTab user={displayProfile} />}
-          {/* ========================= */}
-
-          {activeTab === 'my-rooms' && user?.role === 'landlord' && <LandlordRooms userId={user?._id || ""} />}
-          
-          {activeTab === 'my-posts' && <MyPostsList userId={user?._id || ""} />}
-
-          {activeTab === 'password' && (
-            <div className="bg-white rounded-xl shadow-sm border border-brand-accent/30 overflow-hidden">
-              <div className="p-6 border-b border-brand-accent/20">
-                <h2 className="text-lg font-bold text-brand-dark">Đổi mật khẩu</h2>
-                <p className="text-sm text-gray-500">Vui lòng nhập mật khẩu hiện tại để thay đổi mật khẩu mới.</p>
-              </div>
-              <div className="p-6 md:p-8 max-w-xl">
-                <ChangePasswordForm />
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
-    </div>
-  );
+                        {activeTab === 'verification' && displayProfile && <VerificationTab user={displayProfile as User} />}
+                        {activeTab === 'my-rooms' && <LandlordRooms userId={user._id} />}
+                        {activeTab === 'my-posts' && <MyPostsList userId={user._id} />}
+                        {activeTab === 'password' && <ChangePasswordForm />}
+                    </motion.div>
+                </AnimatePresence>
+            </div>
+        </main>
+      </div>
+    </div>
+  );
 };
 
 export default Profile;
